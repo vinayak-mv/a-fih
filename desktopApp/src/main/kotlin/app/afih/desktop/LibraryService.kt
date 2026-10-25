@@ -27,9 +27,11 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     private val playbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val playbackLock = Mutex()
     private var player: PlayerWindow? = null
+    private var playbackGeneration = 0L
 
     suspend fun play(configuration: AppConfiguration, media: IndexedMessage) = playbackLock.withLock {
         check(!closed)
+        val generation = ++playbackGeneration
         player?.close(); player = null
         val provider = configuration.providers.firstOrNull { it.id == media.key.providerId }
             ?: throw IllegalArgumentException("The provider for this file has been removed.")
@@ -37,7 +39,7 @@ class LibraryService(private val directory: Path) : AutoCloseable {
         var opened: PlayerWindow? = null
         try {
             opened = try { withContext(NonCancellable) {
-                PlayerWindow.open(media, source, playbackStore) { playbackScope.launch { stopPlayback() } }
+                PlayerWindow.open(media, source, playbackStore) { playbackScope.launch { stopPlayback(generation) } }
             } } catch (_: LinkageError) { throw PlaybackFailure("The player runtime could not load. Extract the complete Windows preview artifact and retry.") }
             currentCoroutineContext().ensureActive()
             player = opened
@@ -47,7 +49,12 @@ class LibraryService(private val directory: Path) : AutoCloseable {
         }
     }
 
-    private suspend fun stopPlayback() = playbackLock.withLock { player?.close(); player = null }
+    private suspend fun stopPlayback(expectedGeneration: Long? = null) = playbackLock.withLock {
+        if (expectedGeneration == null || expectedGeneration == playbackGeneration) {
+            ++playbackGeneration
+            player?.close(); player = null
+        }
+    }
 
     fun catalog(configuration: AppConfiguration, libraryId: String? = null): List<CatalogFile> {
         val sourceIds = configuration.sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet()
@@ -128,13 +135,15 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     fun media(sources: List<TelegramSource>, libraryId: String? = null, query: String = ""): List<IndexedMessage> =
         index.list(sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet(), query = query)
 
-    suspend fun disconnect(providerId: String) {
-        stopPlayback()
+    suspend fun disconnect(providerId: String) = playbackLock.withLock {
+        ++playbackGeneration
+        player?.close(); player = null
         sessionLock.withLock { sessions.remove(providerId)?.second?.close(); Unit }
     }
 
-    suspend fun resetSession(providerId: String) {
-        stopPlayback()
+    suspend fun resetSession(providerId: String) = playbackLock.withLock {
+        ++playbackGeneration
+        player?.close(); player = null
         sessionLock.withLock {
             sessions[providerId]?.second?.close()
             sessions.remove(providerId)

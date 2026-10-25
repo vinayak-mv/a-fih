@@ -44,7 +44,7 @@ class StreamingTest {
         source.close()
         assertEquals(listOf("cancelDownloadFile", "deleteFile"), queries.takeLast(2).map { it.string("@type") })
     }
-    @Test fun shortTelegramReadsAreNotReturnedAsValidContent() = runBlocking {
+    @Test fun shortTelegramReadsAreNotReturnedAsValidContent(): Unit = runBlocking {
         val source = TelegramByteSource(1, 10) { query ->
             if (query.string("@type") == "getFileDownloadedPrefixSize") buildJsonObject { put("size", 10) }
             else buildJsonObject { put("data", "AQ==") }
