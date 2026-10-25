@@ -16,7 +16,11 @@ internal fun journalUpdate(store: SyncStore, provider: String, chats: Set<String
     val chat = message?.number("chat_id")?.toString() ?: update.number("chat_id").toString()
     if (chat !in chats) return false
     fun raw(value: Long) = runCatching { fromTdMessageId(value) }.getOrNull()
-    if (message != null) raw(message.number("id"))?.let { store.watermark(provider,chat,it) }
+    if (message != null) raw(message.number("id"))?.let {
+        store.watermark(provider,chat,it)
+        // A replayed/new message can arrive behind a previously scanned upper bound.
+        if(type == "updateNewMessage") store.enqueue(MessageKey(provider,chat,it),"refresh")
+    }
     if(type == "updateMessageContent") raw(update.number("message_id"))?.let { store.enqueue(MessageKey(provider,chat,it),"refresh") }
     if(type == "updateDeleteMessages" && update["from_cache"]?.jsonPrimitive?.booleanOrNull != true) {
         (update["message_ids"] as? JsonArray).orEmpty().forEach { id -> raw(id.jsonPrimitive.long)?.let {

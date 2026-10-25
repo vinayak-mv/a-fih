@@ -246,11 +246,11 @@ class LibraryService(private val directory: Path) : AutoCloseable {
                             scanLocked(provider,source) {}
                             if (source.automaticUpdates) refreshPending(snapshot,provider)
                             if(snapshot.tmdb != null) {
-                                try { metadata.enrich(snapshot,catalog(snapshot)); changed() }
+                                try { metadata.enrich(snapshot,catalog(snapshot)) { _,_ -> }; changed() }
                                 catch (failure: Exception) { if(failure is CancellationException) throw failure; status(source,source.lastId,false,"Source updated. ${userFacingFailure(failure)}") }
                             }
-                        } catch (cancelled: CancellationException) { if(cancelled !is TimeoutCancellationException) throw cancelled }
-                        catch (failure: Exception) {
+                        } catch (failure: Exception) {
+                            if(failure is CancellationException && failure !is TimeoutCancellationException) throw failure
                             if(syncStore.run(source.id).retryAt <= System.currentTimeMillis()) {
                                 syncStore.failure(source.id,System.currentTimeMillis()+((failure as? TelegramFailure)?.retryAfterMs?.takeIf { it > 0 } ?: 60_000))
                                 status(source,source.lastId,false,"${userFacingFailure(failure)} Automatic retry is scheduled.")
@@ -276,12 +276,12 @@ class LibraryService(private val directory: Path) : AutoCloseable {
             val sources = snapshot.sources.filter { it.providerId == provider.id && it.chat == item.key.chat && it.automaticUpdates }
             if (sources.isEmpty()) continue
             val old = index.get(item.key)
+            val memberships = index.sourceMemberships(sources.map { it.id }.toSet())[item.key].orEmpty()
             if (item.kind != "refresh") {
-                if(old != null) { personal.issue(old,if(item.kind == "deleted") "MISSING" else "ACCESS",if(item.kind == "deleted") "Telegram reported that this message was deleted." else "Telegram reported that this message is inaccessible."); changed() }
+                if(old != null && memberships.isNotEmpty()) { personal.issue(old,if(item.kind == "deleted") "MISSING" else "ACCESS",if(item.kind == "deleted") "Telegram reported that this message was deleted." else "Telegram reported that this message is inaccessible."); changed() }
             } else {
                 var matched = false
                 var unavailable = false
-                val memberships = index.sourceMemberships(sources.map { it.id }.toSet())[item.key].orEmpty()
                 for (source in sources) {
                     if(item.key.messageId < source.firstId && source.id !in memberships) continue
                     val refreshed = try { connected.refresh(source.chat,item.key.messageId,source.parsingMode ?: provider.parsingMode) }
@@ -293,7 +293,7 @@ class LibraryService(private val directory: Path) : AutoCloseable {
                         personal.clearIssue(item.key); changed()
                     }
                 }
-                if (!matched && !unavailable && old != null) { personal.issue(old,"MEDIA_CHANGED","This message no longer contains media for this source. Check the message and source access."); changed() }
+                if (!matched && !unavailable && old != null && memberships.isNotEmpty()) { personal.issue(old,"MEDIA_CHANGED","This message no longer contains media for this source. Check the message and source access."); changed() }
             }
             syncStore.acknowledge(item)
         }

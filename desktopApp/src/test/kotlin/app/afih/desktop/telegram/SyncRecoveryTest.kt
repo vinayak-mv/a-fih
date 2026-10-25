@@ -31,11 +31,11 @@ class SyncRecoveryTest {
             putJsonArray("message_ids") { add(toTdMessageId(9)) }
         }
         journalUpdate(store,"bot",setOf(chat),deleted(true))
-        assertEquals(listOf(7L),store.pending("bot").map { it.key.messageId })
+        assertEquals(listOf(7L,120L),store.pending("bot").map { it.key.messageId })
         journalUpdate(store,"bot",setOf(chat),deleted(false))
         val reopened = SyncStore(path)
         assertEquals(120L,reopened.latest("bot",chat))
-        assertEquals(listOf("refresh","deleted"),reopened.pending("bot").map { it.kind })
+        assertEquals(listOf("refresh","deleted","refresh"),reopened.pending("bot").map { it.kind })
         reopened.watermark("bot",chat,100)
         assertEquals(120L,reopened.latest("bot",chat))
         assertEquals(0L,reopened.latest("other",chat))
