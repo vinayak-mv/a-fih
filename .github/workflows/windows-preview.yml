@@ -111,8 +111,8 @@ jobs:
         id: player-cache
         uses: actions/cache@v4
         with:
-          path: native/windows-x64/vlc
-          key: vlc-windows-x64-${{ hashFiles('scripts/prepare-player.ps1') }}
+          path: native/windows-x64/mpv
+          key: mpv-windows-x64-${{ hashFiles('scripts/prepare-player.ps1') }}
       - name: Prepare bundled player
         if: steps.player-cache.outputs.cache-hit != 'true'
         shell: pwsh

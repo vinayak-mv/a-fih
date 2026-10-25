@@ -119,8 +119,9 @@ baseline rather than a requirement to use the newest available versions.
 ## Next milestone
 
 Open a title, choose an available file/version, and press **Play**. The Windows
-preview bundles VLC, opens a player window, and supports seeking, play/pause,
-volume, embedded audio/subtitle tracks, and automatic resume. Closing the player
+preview bundles libmpv and plays inside the main app, with fullscreen, seeking,
+play/pause, volume, embedded audio/subtitle tracks, and automatic resume. Back
+returns to your library. Leaving the player
 stops its Telegram requests and removes its temporary stream cache. A failed
 stream can be retried by closing the player and pressing Play again.
 
@@ -130,8 +131,11 @@ Local stream data is temporary and is not an offline download. Playback progress
 is stored in the local SQLite index. Near-complete items restart from the beginning.
 
 For local development, run `./scripts/prepare-player.ps1` to install the pinned,
-checksum-verified VLC runtime under the ignored `native/windows-x64/vlc` folder.
-CI runs `:desktopApp:playerSmoke` against the bundled runtime before packaging.
+checksum-verified libmpv runtime under the ignored `native/windows-x64/mpv` folder.
+CI runs `:desktopApp:playerSmoke` to render video in an embedded Windows surface
+and exercise pause, volume, seeking, and cleanup against the bundled runtime.
+No separate mpv installation is needed. Space toggles playback, Left/Right skip
+10 seconds, F toggles fullscreen, and Escape exits fullscreen or returns to the library.
 See [third-party notices](docs/third-party-notices.md) for player source/license links.
 
 Next: validate Telegram seeking and your MKV/H.265/audio/subtitle combinations,

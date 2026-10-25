@@ -16,6 +16,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import app.afih.model.*
+import app.afih.desktop.playback.InAppPlayer
 import java.util.UUID
 import kotlinx.coroutines.*
 
@@ -43,7 +44,7 @@ fun AfihTheme(content: @Composable () -> Unit) {
 private enum class Page(val label: String) { HOME("Home"), LIBRARIES("Libraries"), SOURCES("Sources"), PROVIDERS("Providers"), METADATA("Metadata"), OFFLINE("Downloads"), ISSUES("Issues") }
 
 @Composable
-fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
+fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Boolean = false, onFullscreenChange: (Boolean) -> Unit = {}) {
     var configuration by remember { mutableStateOf(initial) }
     var page by remember { mutableStateOf(Page.HOME) }
     var providerEditor by remember { mutableStateOf(false) }
@@ -147,6 +148,17 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
 
     LaunchedEffect(Unit) { if (configuration.tmdb != null) enrich() }
 
+    val playback by service.playback.collectAsState()
+    playback?.let { session ->
+        InAppPlayer(session, fullscreen, onFullscreen = { onFullscreenChange(!fullscreen) }, onBack = {
+            scope.launch {
+                try { withContext(Dispatchers.IO) { service.stopPlayback() }; onFullscreenChange(false) }
+                catch (failure: Exception) { operationError = userFacingFailure(failure) }
+            }
+        })
+        return
+    }
+
     Row(Modifier.fillMaxSize().background(Canvas)) {
         Column(
             Modifier.width(200.dp).fillMaxHeight().background(Color.White).padding(20.dp),
@@ -161,7 +173,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            Text("Windows preview · 0.3.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Windows preview · 0.5.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

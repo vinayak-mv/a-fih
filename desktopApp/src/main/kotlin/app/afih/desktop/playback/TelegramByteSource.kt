@@ -25,7 +25,8 @@ internal class TelegramByteSource(
         withTimeout(90_000) {
             fun prefixRequest() = request("getFileDownloadedPrefixSize") { put("file_id", fileId); put("offset", offset) }
             if (call(prefixRequest()).number("size") < needed) {
-                if (offset < requestedFrom || offset + needed > requestedThrough) {
+                val active = call(request("getFile") { put("file_id", fileId) }).obj("local")?.get("is_downloading_active")?.jsonPrimitive?.booleanOrNull == true
+                if (offset < requestedFrom || offset + needed > requestedThrough || !active) {
                     val window = minOf(4L * 1024 * 1024, size - offset)
                     call(request("downloadFile") {
                         put("file_id", fileId); put("priority", 32); put("offset", offset)

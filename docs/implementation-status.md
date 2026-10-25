@@ -1,6 +1,25 @@
 # Implementation status
 
-## Telegram streaming increment (0.4.0)
+## In-app mpv player increment (0.5.0)
+
+The user confirmed Telegram playback works in 0.4.0 and requested an integrated
+mpv player. This replaces the separate VLC/Swing window entirely.
+
+- [x] Bundled baseline x86_64 libmpv with pinned archive and SHA-256 verification.
+- [x] Direct JNA client API; VLC/vlcj dependencies and separate player window removed.
+- [x] Video embedded in the existing main window; navigation and controls use Compose.
+- [x] Back to library, actual fullscreen, seek slider, ±10 seconds, play/pause/replay,
+  volume, embedded audio/subtitle menus, status/error/retry, and keyboard shortcuts.
+- [x] Existing Telegram byte ranges, temporary cache cleanup, and saved progress retained.
+- [x] Native HWND lifecycle hooks release mpv before a video surface is destroyed.
+- [x] Native client ABI/commands/properties/track/error fixtures plus an embedded
+  video smoke check using generated media and the real loopback bridge.
+
+Verification: Kotlin tests, native embedded playback/control checks, and portable
+packaging require this increment's CI run. Live rendering and fullscreen with
+the user's Telegram MKV/H.265 collection remain device-side checks.
+
+## Telegram streaming increment (0.4.0, player superseded by 0.5.0)
 
 - [x] Play any imported movie, episode/version, unmatched video, or audio file.
 - [x] Resolve the message again when opening media; use its current file ID/size.
@@ -134,5 +153,6 @@ boundary, following the pinned TDLib `MessageId.h` layout.
 
 The initial UI uses system fonts until licensed Manrope/Inter font assets are
 bundled. It follows the prototype's tokens but has not been visually verified
-and now includes metadata details. The native player uses a separate window
-to keep the heavyweight Windows video surface clear of Compose overlays.
+and now includes metadata details. The mpv video surface occupies a dedicated
+region inside the main window, with Compose controls in adjacent regions to
+avoid placing overlays over a heavyweight Windows surface.

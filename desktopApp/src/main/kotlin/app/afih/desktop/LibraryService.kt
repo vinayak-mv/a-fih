@@ -12,6 +12,8 @@ import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -24,36 +26,30 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     private val index by lazy { MediaIndex(directory.resolve("media.sqlite")) }
     val metadata by lazy { MetadataService(MetadataStore(directory.resolve("media.sqlite"))) }
     private val playbackStore by lazy { PlaybackStore(directory.resolve("media.sqlite")) }
-    private val playbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val playbackLock = Mutex()
-    private var player: PlayerWindow? = null
-    private var playbackGeneration = 0L
+    private val mutablePlayback = MutableStateFlow<PlaybackSession?>(null)
+    internal val playback = mutablePlayback.asStateFlow()
 
     suspend fun play(configuration: AppConfiguration, media: IndexedMessage) = playbackLock.withLock {
         check(!closed)
-        val generation = ++playbackGeneration
-        player?.close(); player = null
+        closePlayback()
         val provider = configuration.providers.firstOrNull { it.id == media.key.providerId }
             ?: throw IllegalArgumentException("The provider for this file has been removed.")
         val source = session(provider).openMedia(media)
-        var opened: PlayerWindow? = null
         try {
-            opened = try { withContext(NonCancellable) {
-                PlayerWindow.open(media, source, playbackStore) { playbackScope.launch { stopPlayback(generation) } }
-            } } catch (_: LinkageError) { throw PlaybackFailure("The player runtime could not load. Extract the complete Windows preview artifact and retry.") }
             currentCoroutineContext().ensureActive()
-            player = opened
+            mutablePlayback.value = PlaybackSession.open(media, source, playbackStore)
         } catch (failure: Throwable) {
-            withContext(NonCancellable) { if (opened != null) opened.close() else source.close() }
+            withContext(NonCancellable) { source.close() }
             throw failure
         }
     }
 
-    private suspend fun stopPlayback(expectedGeneration: Long? = null) = playbackLock.withLock {
-        if (expectedGeneration == null || expectedGeneration == playbackGeneration) {
-            ++playbackGeneration
-            player?.close(); player = null
-        }
+    internal suspend fun stopPlayback() = playbackLock.withLock { closePlayback() }
+
+    private suspend fun closePlayback() {
+        mutablePlayback.value?.close()
+        mutablePlayback.value = null
     }
 
     fun catalog(configuration: AppConfiguration, libraryId: String? = null): List<CatalogFile> {
@@ -136,14 +132,12 @@ class LibraryService(private val directory: Path) : AutoCloseable {
         index.list(sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet(), query = query)
 
     suspend fun disconnect(providerId: String) = playbackLock.withLock {
-        ++playbackGeneration
-        player?.close(); player = null
+        closePlayback()
         sessionLock.withLock { sessions.remove(providerId)?.second?.close(); Unit }
     }
 
     suspend fun resetSession(providerId: String) = playbackLock.withLock {
-        ++playbackGeneration
-        player?.close(); player = null
+        closePlayback()
         sessionLock.withLock {
             sessions[providerId]?.second?.close()
             sessions.remove(providerId)
@@ -161,7 +155,6 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     override fun close() {
         closed = true
         runBlocking { stopPlayback() }
-        playbackScope.cancel()
         sessions.values.forEach { runCatching { it.second.close() } }
         sessions.clear()
     }

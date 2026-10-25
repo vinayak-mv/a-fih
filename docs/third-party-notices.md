@@ -1,18 +1,21 @@
 # Player components
 
-The unsigned Windows testing artifact includes VLC 3.0.24 from VideoLAN's
-[official Windows archive](https://download.videolan.org/pub/videolan/vlc/3.0.24/win64/).
-The preparation script verifies the published archive SHA-256. The complete
-runtime retains upstream COPYING/license notices beside its DLLs/plugins.
-VideoLAN publishes the corresponding
-[VLC 3.0.24 source archive](https://download.videolan.org/pub/videolan/vlc/3.0.24/).
-LibVLC is LGPL; VLC and plugins include GPL components. Refer to the individual
-upstream component notices for their applicable terms.
+Since 0.5.0 the Windows artifact bundles libmpv from
+[shinchiro's 20261021 build](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261021),
+a Windows build distributor listed on [mpv's installation page](https://mpv.io/installation/).
+The baseline x86_64 archive is pinned to SHA-256
+`efc719eff3dc5954b4a5efc800632808bcec01cc9034940dd14e5eb7fe9ea633`.
+It does not require the additional CPU instructions of x86_64-v3 builds.
 
-The app uses [vlcj 4.8.3](https://github.com/caprica/vlcj/tree/vlcj-4.8.3),
-a GPL-3.0 Java binding to LibVLC. Its source and license are available at that
-pinned tag. Public release licensing/distribution must account for vlcj's GPL
-terms; a project-wide release license has not yet been selected.
+mpv source is pinned to [e471496c56](https://github.com/mpv-player/mpv/tree/e471496c56).
+Upstream Copyright, LICENSE.GPL, LICENSE.LGPL, source/build links and archive
+contents are retained under the packaged `mpv` resource directory. The build
+scripts identify FFmpeg/libass/libplacebo and other dependencies. This is a GPL
+build; public distribution must account for its component license terms. A
+project-wide release license has not yet been selected.
+
+The app calls the libmpv client ABI directly through JNA. VLC and vlcj are no
+longer included. mpv has no external application installation requirement.
 
 These components are used by the Windows player. Telegram runtime notices are
 also included by the TDLib build script. No provider credentials are embedded
