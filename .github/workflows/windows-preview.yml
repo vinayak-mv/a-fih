@@ -107,6 +107,19 @@ jobs:
           } finally {
             [System.Runtime.InteropServices.NativeLibrary]::Free($handle)
           }
+      - name: Restore player runtime
+        id: player-cache
+        uses: actions/cache@v4
+        with:
+          path: native/windows-x64/vlc
+          key: vlc-windows-x64-${{ hashFiles('scripts/prepare-player.ps1') }}
+      - name: Prepare bundled player
+        if: steps.player-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/prepare-player.ps1
+      - name: Exercise bundled native player
+        shell: pwsh
+        run: ./gradlew.bat --no-daemon :desktopApp:playerSmoke
       - name: Package portable application
         shell: pwsh
         run: ./gradlew.bat --no-daemon :desktopApp:createDistributable

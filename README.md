@@ -58,7 +58,7 @@ to browse imported file titles. Editing a source's range or parsing preference
 causes a fresh bounded scan; already imported media is retained and deduplicated.
 Removing a source forgets its index associations without touching Telegram files.
 
-Incoming updates, update recovery, scheduled scanning, playback, and downloads
+Incoming updates, update recovery, scheduled scanning, and offline downloads
 are not implemented yet. Their screens do not contain
 fake media or success results. Live bot access still needs testing with your own
 credentials; compilation and fixture tests cannot establish Telegram permissions.
@@ -118,6 +118,22 @@ baseline rather than a requirement to use the newest available versions.
 
 ## Next milestone
 
-Validate a live range import with your bot and test reconnect/update recovery,
-then implement incoming updates and scheduling. Native playback and downloads
-follow. Raw MTProto message IDs remain separate from TDLib's internal encoding.
+Open a title, choose an available file/version, and press **Play**. The Windows
+preview bundles VLC, opens a player window, and supports seeking, play/pause,
+volume, embedded audio/subtitle tracks, and automatic resume. Closing the player
+stops its Telegram requests and removes its temporary stream cache. A failed
+stream can be retried by closing the player and pressing Play again.
+
+The player reads Telegram ranges through a private `127.0.0.1` connection on a
+random port; it needs no hosted server. Media remains on Telegram until requested.
+Local stream data is temporary and is not an offline download. Playback progress
+is stored in the local SQLite index. Near-complete items restart from the beginning.
+
+For local development, run `./scripts/prepare-player.ps1` to install the pinned,
+checksum-verified VLC runtime under the ignored `native/windows-x64/vlc` folder.
+CI runs `:desktopApp:playerSmoke` against the bundled runtime before packaging.
+See [third-party notices](docs/third-party-notices.md) for player source/license links.
+
+Next: validate Telegram seeking and your MKV/H.265/audio/subtitle combinations,
+then add durable downloads, incoming updates, scheduling, and update recovery.
+Raw MTProto message IDs remain separate from TDLib's internal encoding.

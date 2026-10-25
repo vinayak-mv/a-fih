@@ -117,6 +117,9 @@ private fun CatalogHero(details: TitleDetails, subtitle: String, actionLabel: St
 @Composable
 private fun TitleDialog(group: TitleGroup, configuration: AppConfiguration, service: LibraryService, onClose: () -> Unit) {
     val details = group.details
+    val scope = rememberCoroutineScope()
+    var openingPlayer by remember { mutableStateOf(false) }
+    var playbackError by remember { mutableStateOf<String?>(null) }
     val uri = LocalUriHandler.current
     var seasonNumber by remember { mutableStateOf(details?.seasons?.firstOrNull { season -> group.files.any { it.metadata?.season == season.number } }?.number ?: details?.seasons?.firstOrNull()?.number) }
     var season by remember { mutableStateOf<SeasonDetails?>(null) }
@@ -177,15 +180,28 @@ private fun TitleDialog(group: TitleGroup, configuration: AppConfiguration, serv
                     }
                 } else Text("This file has not been matched to TMDB. It remains available in your library.")
                 Text("Available files · ${group.files.size}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                if (openingPlayer) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Opening Telegram stream…") }
+                playbackError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 group.files.sortedWith(compareBy({ it.metadata?.season ?: 0 }, { it.metadata?.episode ?: 0 }, { it.media.fileName })).forEach { file ->
                     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(file.media.fileName, style = MaterialTheme.typography.titleSmall)
                             Text("${file.media.mimeType.ifBlank { "Media file" }} · ${file.media.sizeBytes / (1024 * 1024)} MB · message ${file.media.key.messageId}", style = MaterialTheme.typography.bodySmall)
+                            Button(enabled = !openingPlayer, onClick = {
+                                openingPlayer = true; playbackError = null
+                                scope.launch {
+                                    try {
+                                        withContext(Dispatchers.IO) { service.play(configuration, file.media) }
+                                        onClose()
+                                    } catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (failure: Exception) { playbackError = userFacingFailure(failure) }
+                                    finally { openingPlayer = false }
+                                }
+                            }) { Text("Play") }
                         }
                     }
                 }
-                Text("Playback and downloads are coming in the next milestone.", style = MaterialTheme.typography.bodySmall)
+                Text("Streams use temporary storage. Offline downloads are coming in a later milestone.", style = MaterialTheme.typography.bodySmall)
                 if (details != null) TmdbAttribution()
             }
         }

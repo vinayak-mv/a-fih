@@ -81,6 +81,23 @@ internal class TelegramSession(
 
     suspend fun resolveChat(reference: String): Pair<String, String> = resolveTelegramChat(reference, client::call)
 
+    suspend fun openMedia(media: IndexedMessage): app.afih.desktop.playback.MediaByteSource {
+        resolveChat(media.key.chat)
+        // Reload the message instead of trusting an old remote reference or catalog size.
+        val response = client.call(request("getMessage") {
+            put("chat_id", media.key.chat.toLong()); put("message_id", toTdMessageId(media.key.messageId))
+        })
+        val content = response.obj("content")
+        val kind = when (content?.string("@type")) {
+            "messageVideo" -> "video"; "messageDocument" -> "document"; "messageAudio" -> "audio"
+            else -> throw TelegramFailure("This message no longer contains playable media.")
+        }
+        val file = content?.obj(kind)?.obj(kind) ?: throw TelegramFailure("The media is unavailable.")
+        val size = file.number("size")
+        if (size <= 0 || file.number("id") <= 0) throw TelegramFailure("Telegram could not determine the media size. Retry this file.")
+        return app.afih.desktop.playback.TelegramByteSource(file.number("id"), size, client::call)
+    }
+
     suspend fun fetch(chat: String, ids: List<Long>, parsingMode: ParsingMode): List<IndexedMessage> {
         val response = client.call(request("getMessages") {
             put("chat_id", chat.toLong())

@@ -1,5 +1,25 @@
 # Implementation status
 
+## Telegram streaming increment (0.4.0)
+
+- [x] Play any imported movie, episode/version, unmatched video, or audio file.
+- [x] Resolve the message again when opening media; use its current file ID/size.
+- [x] Bounded TDLib range downloads and verified downloaded-prefix reads.
+- [x] Private loopback bridge with single-range GET/HEAD, suffix ranges, and seeking.
+- [x] Native Windows VLC player window with play/pause, seek, volume, maximize,
+  embedded audio/subtitle selection, buffering/error text, and retry by reopening.
+- [x] Local playback position per provider/chat/message, retained across restarts.
+- [x] Stop superseded reads and clean temporary stream data when the player closes.
+- [x] Checksum-pinned VLC runtime bundled alongside Java and TDLib in CI artifacts.
+- [x] Range/HTTP/Telegram-read/progress fixtures and a native WAV playback smoke check.
+
+Current verification: the new tests, native player smoke check, and portable
+packaging require CI. Live Telegram seeking, MKV/H.265, and track selection need
+testing with the user's media. This is a Windows player milestone; Android,
+offline downloads, external subtitles, a persistent unavailable-media queue,
+and continue-watching shelves remain pending. Streaming uses temporary storage,
+not the offline library. Only one playback window is active at a time.
+
 ## TMDB library increment (0.3.0)
 
 - [x] Protected TMDB API key/read-token settings and language selection.
@@ -12,8 +32,9 @@
 - [x] Bounded local artwork cache, graceful missing artwork, and TMDB attribution.
 - [x] Fixture tests cover matching, decoding, caching, retry, and schema preservation.
 
-Current increment verification: CI compilation/tests and live matching with the
-user's TMDB credential are pending. No personal credentials are used in fixtures.
+CI run 40204666570 passed 35 tests, native runtime checks, and Windows packaging.
+Live matching with the user's TMDB credential remains a device-side check.
+No personal credentials are used in fixtures.
 
 ## Telegram import increment (0.2.0)
 
@@ -44,8 +65,8 @@ revealed a missing gperf build tool; the build script now installs it through
 the pinned vcpkg tree and supplies its path to CMake. Subsequent native packaging
 and the user's live bot test succeeded.
 No personal credentials are present in fixtures. Incoming update indexing,
-reconnection recovery, scheduled scans, streaming, playback, downloads, and
-Android remain pending. Imported files currently have no play or download button.
+reconnection recovery, scheduled scans, downloads, and Android remain pending.
+Streaming/playback was added in 0.4.0; downloads have no button yet.
 
 ## Foundation implemented
 
@@ -75,8 +96,8 @@ Completed local checks:
 - Reviewed configuration diagnostics: credential values are masked/redacted and
   provider data is not printed to logs.
 
-The 0.2.0 build and live cold-start import were validated. No YAML linter is
-installed. The new 0.3.0 tests and packaging still require a successful CI run.
+The 0.2.0 build and live cold-start import were validated; 0.3.0 passed CI.
+No YAML linter is installed. The 0.4.0 checks still require CI.
 
 ## Next work
 
@@ -90,7 +111,8 @@ installed. The new 0.3.0 tests and packaging still require a successful CI run.
 - [ ] Automatic retry/backoff and flood-wait scheduling (manual retry is available).
 - [ ] Validate bot update recovery and stale cursors through chosen transport.
 - [ ] Launch/manual/periodic scheduling and incoming media updates.
-- [ ] Native player selection, seekable streaming, and real codec/track validation.
+- [x] Native Windows player and seekable Telegram streaming implemented.
+- [ ] Live Telegram playback, seeking, and real codec/track validation.
 - [ ] Durable downloads, completed-download offline library, and offline playback.
 - [x] TMDB metadata, matched grouping, poster/detail discovery, and basic search.
 - [ ] Richer release parsing, music metadata, and personal watch state.
@@ -109,4 +131,5 @@ boundary, following the pinned TDLib `MessageId.h` layout.
 
 The initial UI uses system fonts until licensed Manrope/Inter font assets are
 bundled. It follows the prototype's tokens but has not been visually verified
-and now includes metadata details; the player remains unimplemented.
+and now includes metadata details. The native player uses a separate window
+to keep the heavyweight Windows video surface clear of Compose overlays.

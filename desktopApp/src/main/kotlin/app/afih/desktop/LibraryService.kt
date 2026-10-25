@@ -2,6 +2,7 @@ package app.afih.desktop
 
 import app.afih.desktop.index.MediaIndex
 import app.afih.desktop.metadata.*
+import app.afih.desktop.playback.*
 import app.afih.desktop.telegram.TelegramFailure
 import app.afih.desktop.telegram.TelegramSession
 import app.afih.model.*
@@ -22,6 +23,31 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     @Volatile private var closed = false
     private val index by lazy { MediaIndex(directory.resolve("media.sqlite")) }
     val metadata by lazy { MetadataService(MetadataStore(directory.resolve("media.sqlite"))) }
+    private val playbackStore by lazy { PlaybackStore(directory.resolve("media.sqlite")) }
+    private val playbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val playbackLock = Mutex()
+    private var player: PlayerWindow? = null
+
+    suspend fun play(configuration: AppConfiguration, media: IndexedMessage) = playbackLock.withLock {
+        check(!closed)
+        player?.close(); player = null
+        val provider = configuration.providers.firstOrNull { it.id == media.key.providerId }
+            ?: throw IllegalArgumentException("The provider for this file has been removed.")
+        val source = session(provider).openMedia(media)
+        var opened: PlayerWindow? = null
+        try {
+            opened = withContext(NonCancellable) {
+                PlayerWindow.open(media, source, playbackStore) { playbackScope.launch { stopPlayback() } }
+            }
+            currentCoroutineContext().ensureActive()
+            player = opened
+        } catch (failure: Throwable) {
+            withContext(NonCancellable) { if (opened != null) opened.close() else source.close() }
+            throw failure
+        }
+    }
+
+    private suspend fun stopPlayback() = playbackLock.withLock { player?.close(); player = null }
 
     fun catalog(configuration: AppConfiguration, libraryId: String? = null): List<CatalogFile> {
         val sourceIds = configuration.sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet()
@@ -102,9 +128,14 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     fun media(sources: List<TelegramSource>, libraryId: String? = null, query: String = ""): List<IndexedMessage> =
         index.list(sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet(), query = query)
 
-    suspend fun disconnect(providerId: String) = sessionLock.withLock { sessions.remove(providerId)?.second?.close(); Unit }
+    suspend fun disconnect(providerId: String) {
+        stopPlayback()
+        sessionLock.withLock { sessions.remove(providerId)?.second?.close(); Unit }
+    }
 
-    suspend fun resetSession(providerId: String) = sessionLock.withLock {
+    suspend fun resetSession(providerId: String) {
+        stopPlayback()
+        sessionLock.withLock {
         sessions[providerId]?.second?.close()
         sessions.remove(providerId)
         UUID.fromString(providerId)
@@ -114,11 +145,14 @@ class LibraryService(private val directory: Path) : AutoCloseable {
         if (Files.exists(sessionPath)) Files.walk(sessionPath).use { paths ->
             paths.sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
         }
+        }
     }
     fun removeSource(sourceId: String) { check(sourceId !in scans) { "Pause the scan before removing its source." }; index.removeSource(sourceId) }
 
     override fun close() {
         closed = true
+        runBlocking { stopPlayback() }
+        playbackScope.cancel()
         sessions.values.forEach { runCatching { it.second.close() } }
         sessions.clear()
     }
