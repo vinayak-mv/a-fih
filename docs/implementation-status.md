@@ -17,8 +17,10 @@ the user plans UI work after this increment.
 - [x] Persistent issue reasons, play/retry, successful-playback clearing, and local removal.
 - [x] Playback/schema/checkpoint compatibility, journal/retry/schedule/empty-gap fixtures.
 
-Verification: CI compilation/tests, native player smoke, and packaging are pending
-for this increment. Live bot recovery still requires device-side validation.
+Verification: [CI run 40213913662](https://github.com/vinayak-mv/a-fih/actions/runs/40213913662)
+passed 57 tests (16 shared, 41 desktop), the embedded mpv video/control smoke,
+and portable Windows packaging. The artifact is `a-Fih-windows-x64-preview-17`.
+Live bot recovery still requires device-side validation.
 TDLib owns MTProto pts/difference recovery; the app does not maintain a competing
 raw pts cursor. Unknown historical tails cannot be inferred from empty IDs, so a
 manual end-link extension remains available if Telegram cannot replay an old gap.

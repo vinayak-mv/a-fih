@@ -154,6 +154,6 @@ Issues persist failed/unavailable media with retry and local removal. Removing a
 issue's media hides it from the local catalog across rescans; Telegram messages
 are never removed. Successful playback clears an earlier issue.
 
-Next: live-check reconnects/received updates and UI behavior. Downloads and Android
-remain for later, followed by the user's planned UI work.
+Next: the user's planned UI work, alongside live checks for reconnects/received
+updates. Downloads and Android remain deferred.
 Raw MTProto message IDs remain separate from TDLib's internal encoding.
