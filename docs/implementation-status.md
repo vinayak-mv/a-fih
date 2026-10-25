@@ -13,8 +13,10 @@
 - [x] Checksum-pinned VLC runtime bundled alongside Java and TDLib in CI artifacts.
 - [x] Range/HTTP/Telegram-read/progress fixtures and a native WAV playback smoke check.
 
-Current verification: the new tests, native player smoke check, and portable
-packaging require CI. Live Telegram seeking, MKV/H.265, and track selection need
+Verification: [CI run 40206757343](https://github.com/vinayak-mv/a-fih/actions/runs/40206757343)
+passed all 41 tests (16 shared, 25 desktop), native WAV playback through the
+loopback bridge, and portable Windows packaging. Its artifact is
+`a-Fih-windows-x64-preview-9`. Live Telegram seeking, MKV/H.265, and track selection need
 testing with the user's media. This is a Windows player milestone; Android,
 offline downloads, external subtitles, a persistent unavailable-media queue,
 and continue-watching shelves remain pending. Streaming uses temporary storage,
@@ -97,7 +99,8 @@ Completed local checks:
   provider data is not printed to logs.
 
 The 0.2.0 build and live cold-start import were validated; 0.3.0 passed CI.
-No YAML linter is installed. The 0.4.0 checks still require CI.
+No YAML linter is installed. The 0.4.0 tests, native stream smoke check, and
+portable packaging passed in run 40206757343.
 
 ## Next work
 
