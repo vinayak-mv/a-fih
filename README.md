@@ -58,10 +58,12 @@ to browse imported file titles. Editing a source's range or parsing preference
 causes a fresh bounded scan; already imported media is retained and deduplicated.
 Removing a source forgets its index associations without touching Telegram files.
 
-Incoming updates, update recovery, scheduled scanning, and offline downloads
-are not implemented yet. Their screens do not contain
-fake media or success results. Live bot access still needs testing with your own
-credentials; compilation and fixture tests cannot establish Telegram permissions.
+Incoming updates, per-source launch/scheduled scans, personal watch/favorite/list
+state, and a persistent Issues screen are implemented. Downloads remain deferred.
+Live reconnect behavior still needs checking with your bot: TDLib recovers updates
+using its encrypted session state, and the app journals received edits/deletions
+and catches up to known message IDs. It never treats an empty batch as the end.
+If Telegram cannot replay a historical gap, extend the source's end link manually.
 Android has not been enabled yet; shared domain code is in `commonMain` so that
 its business logic can be reused when the Android target is added.
 
@@ -138,6 +140,20 @@ No separate mpv installation is needed. Space toggles playback, Left/Right skip
 10 seconds, F toggles fullscreen, and Escape exits fullscreen or returns to the library.
 See [third-party notices](docs/third-party-notices.md) for player source/license links.
 
-Next: validate Telegram seeking and your MKV/H.265/audio/subtitle combinations,
-then add durable downloads, incoming updates, scheduling, and update recovery.
+Source settings control incoming updates, scans on launch, and an interval in
+minutes (0 disables the schedule). These run while the app is open/minimized.
+Paused scans retain their checkpoints. Transient requests retry with bounded
+backoff; Telegram flood-wait deadlines and failed-source retries persist locally.
+
+The catalog has continue-watching cards, watched/unwatched, favorites, watchlist,
+category/state filters, and title/year/rating/recency sorts. Title details contain
+the personal-state buttons. Completion marks the played file watched. Different
+qualities share a title/episode's watched state in browsing.
+
+Issues persist failed/unavailable media with retry and local removal. Removing an
+issue's media hides it from the local catalog across rescans; Telegram messages
+are never removed. Successful playback clears an earlier issue.
+
+Next: live-check reconnects/received updates and UI behavior. Downloads and Android
+remain for later, followed by the user's planned UI work.
 Raw MTProto message IDs remain separate from TDLib's internal encoding.

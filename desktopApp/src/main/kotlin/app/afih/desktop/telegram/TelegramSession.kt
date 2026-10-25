@@ -18,13 +18,15 @@ import kotlinx.serialization.json.*
 internal class TelegramSession(
     private val provider: TelegramProvider,
     private val directory: Path,
+    private val onUpdate: (JsonObject) -> Unit = {},
+    private val onThrottle: (Long) -> Unit = {},
 ) : AutoCloseable {
     private val ready = CompletableDeferred<Unit>()
     private lateinit var client: TdJsonClient
 
     suspend fun connect() {
-        client = TdJsonClient { update ->
-            if (update.string("@type") != "updateAuthorizationState") return@TdJsonClient
+        client = TdJsonClient(onThrottle) { update ->
+            if (update.string("@type") != "updateAuthorizationState") { onUpdate(update); return@TdJsonClient }
             try {
                 when (update.obj("authorization_state")?.string("@type")) {
                     "authorizationStateWaitTdlibParameters" -> initialize()
@@ -80,6 +82,18 @@ internal class TelegramSession(
     }
 
     suspend fun resolveChat(reference: String): Pair<String, String> = resolveTelegramChat(reference, client::call)
+
+    val isOpen: Boolean get() = ::client.isInitialized && client.isOpen
+
+    suspend fun latestKnown(chat: String): Long {
+        val response = client.call(request("getChat") { put("chat_id",chat.toLong()) })
+        return response.obj("last_message")?.number("id")?.let { runCatching { fromTdMessageId(it) }.getOrNull() } ?: 0
+    }
+
+    suspend fun refresh(chat: String, id: Long, parsing: ParsingMode): IndexedMessage? {
+        val message = client.call(request("getMessage") { put("chat_id",chat.toLong()); put("message_id",toTdMessageId(id)) })
+        return decodeMedia(provider.id, chat, message, parsing)
+    }
 
     suspend fun openMedia(media: IndexedMessage): app.afih.desktop.playback.MediaByteSource {
         resolveChat(media.key.chat)

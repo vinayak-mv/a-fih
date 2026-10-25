@@ -55,9 +55,11 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
     var deletingLibrary by remember { mutableStateOf<MediaLibrary?>(null) }
     var storageError by remember { mutableStateOf(false) }
     val service = remember { LibraryService(ConfigurationStore.defaultPath().parent) }
+    val backgroundScans by service.sync.collectAsState()
     val scope = rememberCoroutineScope()
     val browseScroll = rememberScrollState()
     val scans = remember { mutableStateMapOf<String, ScanUi>() }
+    val displayedScans = backgroundScans + scans.filterValues { it.running }
     val jobs = remember { mutableMapOf<String, Job>() }
     val connections = remember { mutableStateMapOf<String, String>() }
     val connecting = remember { mutableStateMapOf<String, Boolean>() }
@@ -148,6 +150,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
     }
 
     LaunchedEffect(Unit) { if (configuration.tmdb != null) enrich() }
+    LaunchedEffect(configuration) { service.configure(configuration) }
 
     val playback by service.playback.collectAsState()
     playback?.let { session ->
@@ -174,7 +177,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
                 }
             }
             Spacer(Modifier.weight(1f))
-            Text("Windows preview · 0.5.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Windows preview · 0.6.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(browseScroll).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -227,7 +230,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
                                 Text("Telegram · ${provider.parsingMode.label()}")
                                 Text(connections[provider.id] ?: "Saved on this device · connection not verified", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    val providerBusy = connecting[provider.id] == true || configuration.sources.any { it.providerId == provider.id && scans[it.id]?.running == true }
+                                    val providerBusy = connecting[provider.id] == true || configuration.sources.any { it.providerId == provider.id && displayedScans[it.id]?.running == true }
                                     Button(enabled = !providerBusy, onClick = {
                                         connecting[provider.id] = true; connections[provider.id] = "Connecting…"
                                         scope.launch {
@@ -254,13 +257,13 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
                     } else false
                 }, onRefresh = { enrich(retryUnmatched = true) })
                 Page.SOURCES -> SourcesPanel(
-                    configuration, service, scans,
+                    configuration, service, displayedScans,
                     onSave = { source ->
                         val next = configuration.sources.filterNot { it.id == source.id } + source
                         save(configuration.copy(sources = next))
                     },
                     onScan = ::scan,
-                    onPause = { jobs[it.id]?.cancel() },
+                    onPause = { jobs[it.id]?.cancel(); service.pauseScans(it.id) },
                     onRemove = ::removeSource,
                 )
                 Page.LIBRARIES -> {
@@ -285,7 +288,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
                     }
                 }
                 Page.OFFLINE -> EmptyPanel("No downloads yet", "Completed downloads will form your offline library. Downloading is not available in this preview.")
-                Page.ISSUES -> EmptyPanel("No media issues", "Unavailable media will appear here with retry and removal options once playback is connected.")
+                Page.ISSUES -> IssuesPanel(configuration, service)
             }
         }
     }

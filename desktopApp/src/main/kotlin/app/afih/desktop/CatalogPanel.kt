@@ -23,6 +23,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.afih.desktop.metadata.*
 import app.afih.metadata.*
 import app.afih.model.AppConfiguration
+import app.afih.model.LibraryKind
 import java.util.Locale
 import kotlinx.coroutines.*
 
@@ -39,8 +40,14 @@ fun CatalogPanel(configuration: AppConfiguration, service: LibraryService, libra
     var loading by remember { mutableStateOf(true) }
     var selected by remember(libraryId) { mutableStateOf<TitleGroup?>(null) }
     var listView by remember { mutableStateOf(false) }
+    var collection by remember(libraryId) { mutableStateOf(CollectionFilter.ALL) }
+    var sorting by remember(libraryId) { mutableStateOf(CollectionSort.ADDED) }
+    var category by remember(libraryId) { mutableStateOf<LibraryKind?>(null) }
+    val serviceRevision by service.revision.collectAsState()
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
     var visible by remember(libraryId, query) { mutableStateOf(60) }
-    LaunchedEffect(configuration.sources, configuration.tmdb?.language, libraryId, revision) {
+    LaunchedEffect(configuration.sources, configuration.tmdb?.language, libraryId, revision, serviceRevision) {
         loading = true
         try { files = withContext(Dispatchers.IO) { service.catalog(configuration, libraryId) }; failure = null }
         catch (cancelled: CancellationException) { throw cancelled }
@@ -52,13 +59,69 @@ fun CatalogPanel(configuration: AppConfiguration, service: LibraryService, libra
             file.metadata?.details?.let { "${it.type}:${it.id}" } ?: "file:${file.media.key}"
         }.values.map { TitleGroup(it, it.first().metadata?.details) }
     }
-    val filtered = remember(groups, query) { groups.filter { group -> query.isBlank() || group.title.contains(query, true) || group.files.any { it.media.fileName.contains(query, true) } } }
-    if (libraryId == null && query.isBlank()) groups.firstOrNull { it.details?.backdropPath != null }?.let { group ->
+    val filtered = remember(groups, query,collection,sorting,category) {
+        val matches = groups.filter { group ->
+            (query.isBlank() || group.title.contains(query,true) || group.files.any { it.media.fileName.contains(query,true) }) &&
+                collectionMatches(group.files,collection) && (category == null || group.files.any { file -> file.libraryKinds.any { it == category } })
+        }
+        when(sorting) {
+            CollectionSort.ADDED -> matches
+            CollectionSort.TITLE -> matches.sortedBy { it.title.lowercase() }
+            CollectionSort.TITLE_DESC -> matches.sortedByDescending { it.title.lowercase() }
+            CollectionSort.PLAYED -> matches.sortedByDescending { it.files.maxOfOrNull { file -> file.personal.playedAt } ?: 0 }
+            CollectionSort.YEAR -> matches.sortedByDescending { it.details?.year ?: 0 }
+            CollectionSort.RATING -> matches.sortedByDescending { it.details?.rating ?: 0.0 }
+        }
+    }
+    if (libraryId == null && query.isBlank() && collection == CollectionFilter.ALL && category == null) groups.firstOrNull { it.details?.backdropPath != null }?.let { group ->
         CatalogHero(group.details!!, "${group.files.size} available file${if (group.files.size == 1) "" else "s"}") { selected = group }
+    }
+    if(libraryId == null && query.isBlank() && collection == CollectionFilter.ALL) {
+        val continuing = continuingFiles(files).take(12)
+        if(continuing.isNotEmpty()) {
+            Text("Continue watching",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+            Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                continuing.forEach { file -> Surface(shape=MaterialTheme.shapes.medium) {
+                    Column(Modifier.width(180.dp).padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        TmdbArtwork(file.metadata?.details?.posterPath,file.media.title,Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)),placeholder=file.media.title.take(1))
+                        Text(file.metadata?.details?.title ?: file.media.title,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.titleSmall)
+                        file.metadata?.let { if(it.season != null && it.episode != null) Text("S${it.season} · E${it.episode}",style=MaterialTheme.typography.bodySmall) }
+                        LinearProgressIndicator(progress={ (file.personal.positionMs.toDouble()/file.personal.durationMs).toFloat().coerceIn(0f,1f) },modifier=Modifier.fillMaxWidth())
+                        Button(enabled = !opening,onClick = {
+                            opening = true
+                            scope.launch {
+                                try { withContext(Dispatchers.IO) { service.play(configuration,file.media) } }
+                                catch(cancelled: CancellationException) { throw cancelled }
+                                catch(problem: Exception) { failure = userFacingFailure(problem) }
+                                finally { opening = false }
+                            }
+                        }) { Text("Resume") }
+                    }
+                } }
+            }
+        }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("Search your library") }, singleLine = true, modifier = Modifier.weight(1f))
         TextButton(onClick = { listView = !listView }) { Text(if (listView) "Poster view" else "List view") }
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        CollectionFilter.entries.forEach { item -> FilterChip(selected=collection == item,onClick={ collection=item; visible=60 },label={ Text(item.label) }) }
+    }
+    Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+        var sortMenu by remember { mutableStateOf(false) }
+        var categoryMenu by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick={ sortMenu=true }) { Text(sorting.label) }
+            DropdownMenu(expanded=sortMenu,onDismissRequest={ sortMenu=false }) { CollectionSort.entries.forEach { item -> DropdownMenuItem(text={ Text(item.label) },onClick={ sorting=item; sortMenu=false; visible=60 }) } }
+        }
+        Box {
+            OutlinedButton(onClick={ categoryMenu=true }) { Text(category?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "All categories") }
+            DropdownMenu(expanded=categoryMenu,onDismissRequest={ categoryMenu=false }) {
+                DropdownMenuItem(text={ Text("All categories") },onClick={ category=null; categoryMenu=false; visible=60 })
+                LibraryKind.entries.forEach { kind -> DropdownMenuItem(text={ Text(kind.name.lowercase().replaceFirstChar { it.uppercase() }) },onClick={ category=kind; categoryMenu=false; visible=60 }) }
+            }
+        }
     }
     if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
     failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -71,6 +134,7 @@ fun CatalogPanel(configuration: AppConfiguration, service: LibraryService, libra
                 TmdbArtwork(group.details?.posterPath, group.title, Modifier.width(58.dp).height(87.dp).clip(RoundedCornerShape(8.dp)), placeholder = group.title.take(1))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(group.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if(titleWatched(group.files)) Text("Watched",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
                     Text(group.details?.let(::titleFacts) ?: "Unmatched file", style = MaterialTheme.typography.bodySmall)
                     Text(group.details?.overview?.ifBlank { group.files.first().media.fileName } ?: group.files.first().media.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -96,7 +160,10 @@ fun CatalogPanel(configuration: AppConfiguration, service: LibraryService, libra
         }
     }
     if (filtered.size > visible) OutlinedButton(onClick = { visible += 60 }) { Text("Show more titles") }
-    selected?.let { group -> TitleDialog(group, configuration, service) { selected = null } }
+    selected?.let { old ->
+        val group = groups.find { current -> current.files.any { file -> old.files.any { it.media.key == file.media.key } } } ?: old
+        TitleDialog(group, configuration, service) { selected = null }
+    }
 }
 
 @Composable
@@ -120,6 +187,16 @@ private fun TitleDialog(group: TitleGroup, configuration: AppConfiguration, serv
     val scope = rememberCoroutineScope()
     var openingPlayer by remember { mutableStateOf(false) }
     var playbackError by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    fun setFlag(field: String, value: Boolean, targets: List<CatalogFile> = group.files) {
+        saving = true
+        scope.launch {
+            try { withContext(Dispatchers.IO) { service.setPersonal(targets,field,value) } }
+            catch(cancelled: CancellationException) { throw cancelled }
+            catch(failure: Exception) { playbackError=userFacingFailure(failure) }
+            finally { saving=false }
+        }
+    }
     val uri = LocalUriHandler.current
     var seasonNumber by remember { mutableStateOf(details?.seasons?.firstOrNull { season -> group.files.any { it.metadata?.season == season.number } }?.number ?: details?.seasons?.firstOrNull()?.number) }
     var season by remember { mutableStateOf<SeasonDetails?>(null) }
@@ -142,6 +219,13 @@ private fun TitleDialog(group: TitleGroup, configuration: AppConfiguration, serv
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(group.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     TextButton(onClick = onClose) { Text("Close") }
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !saving,onClick={ setFlag("watched",!titleWatched(group.files)) }) { Text(if(titleWatched(group.files)) "Mark unwatched" else "Mark watched") }
+                    val favorite = group.files.any { it.personal.favorite }
+                    val watchlist = group.files.any { it.personal.watchlist }
+                    OutlinedButton(enabled = !saving,onClick={ setFlag("favorite",!favorite) }) { Text(if(favorite) "Unfavorite" else "Favorite") }
+                    OutlinedButton(enabled = !saving,onClick={ setFlag("watchlist",!watchlist) }) { Text(if(watchlist) "Remove from watchlist" else "Add to watchlist") }
                 }
                 if (details != null) {
                     CatalogHero(details, titleFacts(details), "View on TMDB") { uri.openUri("https://www.themoviedb.org/${details.type.path}/${details.id}") }
@@ -198,6 +282,8 @@ private fun TitleDialog(group: TitleGroup, configuration: AppConfiguration, serv
                                     finally { openingPlayer = false }
                                 }
                             }) { Text("Play") }
+                            val versions = group.files.filter { contentUnit(it) == contentUnit(file) }
+                            TextButton(enabled = !saving,onClick={ setFlag("watched",!titleWatched(versions),versions) }) { Text(if(titleWatched(versions)) "Mark unwatched" else "Mark watched") }
                         }
                     }
                 }

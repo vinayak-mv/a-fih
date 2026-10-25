@@ -13,6 +13,27 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class StreamingTest {
+    @Test fun interruptedChunkRetriesAtTheSameOffsetWithoutDuplicatingBytes() {
+        val offsets = java.util.concurrent.CopyOnWriteArrayList<Long>()
+        var interrupted = false
+        var failures = 0
+        val source = object : MediaByteSource {
+            override val size = 600000L
+            override suspend fun read(offset: Long, count: Int): ByteArray {
+                offsets += offset
+                if(offset == 262144L && !interrupted) { interrupted=true; throw TelegramFailure("Connection interrupted","NETWORK",true) }
+                return ByteArray(count) { ((offset + it) % 251).toByte() }
+            }
+            override suspend fun close() = Unit
+        }
+        StreamBridge(source) { failures++ }.use { bridge ->
+            val request = HttpRequest.newBuilder(URI(bridge.url)).timeout(java.time.Duration.ofSeconds(15)).GET().build()
+            val response = HttpClient.newHttpClient().send(request,HttpResponse.BodyHandlers.ofByteArray())
+            assertContentEquals(ByteArray(600000) { (it % 251).toByte() },response.body())
+            assertEquals(listOf(0L,262144L,262144L,524288L),offsets.toList())
+            assertEquals(0,failures)
+        }
+    }
     @Test fun byteRangesHandleLargeFilesSuffixesAndClamping() {
         val size = 6_000_000_000L
         assertEquals(ByteRange(0, size - 1), parseRange(null, size))

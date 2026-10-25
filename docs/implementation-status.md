@@ -1,5 +1,29 @@
 # Implementation status
 
+## Library updates and personal state increment (0.6.0)
+
+User-selected scope: automatic library updates, personal library features,
+unavailable-media issues, and recovery checks. Downloads/Android remain deferred;
+the user plans UI work after this increment.
+
+- [x] Follow received new messages and chat-tail updates using known message IDs.
+- [x] Ordered TDLib update delivery into an app-owned edit/delete journal.
+- [x] Persistent watermarks, contiguous checkpoints, pending-work versions, and retry times.
+- [x] Per-source launch/manual/scheduled scans, pause/resume, and at most two background scans.
+- [x] TDLib reconnect/update recovery retained in its encrypted session; closed sessions recreate.
+- [x] Bounded transient request/stream retries, persisted provider flood-wait cooldowns.
+- [x] Continue watching, watched/unwatched, completion state, favorites, and watchlist.
+- [x] Category/state filters and added/title/played/year/rating sorting.
+- [x] Persistent issue reasons, play/retry, successful-playback clearing, and local removal.
+- [x] Playback/schema/checkpoint compatibility, journal/retry/schedule/empty-gap fixtures.
+
+Verification: CI compilation/tests, native player smoke, and packaging are pending
+for this increment. Live bot recovery still requires device-side validation.
+TDLib owns MTProto pts/difference recovery; the app does not maintain a competing
+raw pts cursor. Unknown historical tails cannot be inferred from empty IDs, so a
+manual end-link extension remains available if Telegram cannot replay an old gap.
+Launch/scheduled work runs while the application is open, including minimized.
+
 ## In-app mpv player increment (0.5.0)
 
 The user confirmed Telegram playback works in 0.4.0 and requested an integrated
@@ -132,14 +156,15 @@ portable packaging passed in run 40206757343.
 - [x] Transactional media index and resumable range checkpoints implemented.
 - [x] Shared scanner wired into manual imports with pause/resume and safe errors.
 - [ ] Validate with a live bot, deleted IDs, empty batches, and process restarts.
-- [ ] Automatic retry/backoff and flood-wait scheduling (manual retry is available).
+- [x] Bounded transient retry/backoff and persisted flood-wait scheduling.
 - [ ] Validate bot update recovery and stale cursors through chosen transport.
-- [ ] Launch/manual/periodic scheduling and incoming media updates.
+- [x] Launch/manual/periodic scheduling and received incoming media updates.
 - [x] Native Windows player and seekable Telegram streaming implemented.
 - [ ] Live Telegram playback, seeking, and real codec/track validation.
 - [ ] Durable downloads, completed-download offline library, and offline playback.
 - [x] TMDB metadata, matched grouping, poster/detail discovery, and basic search.
-- [ ] Richer release parsing, music metadata, and personal watch state.
+- [x] Personal watch state, favorites/watchlist, filters and sorting.
+- [ ] Richer release parsing and music metadata.
 - [ ] Android target, platform implementations, UI adaptation, and build artifacts.
 
 ## Technical boundaries

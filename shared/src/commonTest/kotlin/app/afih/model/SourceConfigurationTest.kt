@@ -1,6 +1,7 @@
 package app.afih.model
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
 class SourceConfigurationTest {
@@ -18,5 +19,11 @@ class SourceConfigurationTest {
         assertFailsWith<IllegalArgumentException> { source.copy(lastId = 0) }
         assertFailsWith<IllegalArgumentException> { source.copy(libraryIds = emptySet()) }
         assertNotEquals(source.scanSignature, source.copy(topicId = 20).scanSignature)
+        assertTrue(source.automaticUpdates && source.scanOnLaunch)
+        assertEquals(15,source.scanIntervalMinutes)
+        assertFailsWith<IllegalArgumentException> { source.copy(scanIntervalMinutes = -1) }
+        val serialized = Json.encodeToString(source)
+        val loaded = Json.decodeFromString<TelegramSource>(serialized)
+        assertEquals(source,loaded)
     }
 }

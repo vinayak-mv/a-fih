@@ -6,8 +6,9 @@ import app.afih.telegram.IndexedMessage
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
+import app.afih.desktop.index.PersonalState
 
-data class CatalogFile(val media: IndexedMessage, val metadata: FileMetadata?, val libraryKinds: Set<LibraryKind> = emptySet())
+data class CatalogFile(val media: IndexedMessage, val metadata: FileMetadata?, val libraryKinds: Set<LibraryKind> = emptySet(), val personal: PersonalState = PersonalState())
 
 internal fun queryFor(file: IndexedMessage): ReleaseTitle {
     val preferred = parseReleaseTitle(file.title)

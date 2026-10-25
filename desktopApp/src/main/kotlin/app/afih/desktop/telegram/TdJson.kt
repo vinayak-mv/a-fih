@@ -14,6 +14,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 
 internal interface TdJsonApi : Library {
@@ -32,12 +38,28 @@ internal fun request(type: String, fields: JsonObjectBuilder.() -> Unit = {}): J
     fields()
 }
 
-class TelegramFailure(message: String) : Exception(message)
+class TelegramFailure(message: String, val kind: String = "TELEGRAM", val retryable: Boolean = false, val retryAfterMs: Long = 0) : Exception(message)
+
+/** Retry only transient failures; cancellation and permission/missing errors never retry. */
+internal suspend fun <T> telegramRetry(wait: suspend (Long) -> Unit = { delay(it) }, operation: suspend () -> T): T {
+    var attempt = 0
+    while (true) {
+        try { return operation() }
+        catch (failure: Exception) {
+            if (failure is CancellationException && failure !is TimeoutCancellationException) throw failure
+            val transient = failure is TimeoutCancellationException || (failure is TelegramFailure && failure.retryable && failure.retryAfterMs == 0L)
+            if (!transient || attempt >= 2) throw failure
+            wait(1000L shl attempt++)
+        }
+    }
+}
 
 /** Never display raw TDLib errors: they can include request values. */
 internal fun telegramFailure(error: JsonObject): TelegramFailure {
     val code = error.number("code")
     val detail = error.string("message")
+    val retryAfter = if (code == 429L) (Regex("(?i)(?:retry after |FLOOD_WAIT_)([0-9]+)").find(detail)?.groupValues?.get(1)?.toLongOrNull() ?: 60L).coerceIn(1,86400) * 1000 else 0L
+    val kind = when { code == 429L -> "RATE_LIMIT"; code == 401L || detail.contains("TOKEN",true) || detail.contains("API_ID",true) || detail.contains("API_HASH",true) -> "AUTH"; code == 403L || detail.contains("CHANNEL_PRIVATE") || detail.contains("USER_NOT_PARTICIPANT") -> "ACCESS"; code == 404L || detail.contains("MESSAGE_ID_INVALID") -> "MISSING"; code >= 500 -> "NETWORK"; else -> "TELEGRAM" }
     return TelegramFailure(when {
         code == 406L -> "Telegram could not complete this request."
         code == 429L -> "Telegram requested a pause. Wait before retrying this operation."
@@ -49,18 +71,21 @@ internal fun telegramFailure(error: JsonObject): TelegramFailure {
         code == 403L -> "Telegram denied access to this source. Check the bot permissions."
         code == 404L -> "Telegram could not find this chat or message."
         else -> "Telegram could not complete this request (code $code). Retry or check the source permissions."
-    })
+    }, kind, code >= 500 || code == 429L, retryAfter)
 }
 
 /** One receive thread per legacy JSON client; requests are correlated using @extra. */
-internal class TdJsonClient(private val onUpdate: suspend (JsonObject) -> Unit) : AutoCloseable {
+internal class TdJsonClient(private val onThrottle: (Long) -> Unit = {}, private val onUpdate: suspend (JsonObject) -> Unit) : AutoCloseable {
     private val api: TdJsonApi = loadLibrary()
     private val client = api.td_json_client_create()
     private val sequence = AtomicLong()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
     private val updates = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private val updateQueue = Channel<JsonObject>(Channel.UNLIMITED)
+    private val updateWorker = updates.launch { for (event in updateQueue) onUpdate(event) }
     @Volatile private var closing = false
     @Volatile private var closed = false
+    @Volatile private var blockedUntil = 0L
     private val receiver = Thread({ receiveLoop() }, "afih-telegram-receive").apply { isDaemon = true; start() }
 
     init {
@@ -68,7 +93,18 @@ internal class TdJsonClient(private val onUpdate: suspend (JsonObject) -> Unit) 
         api.td_json_client_execute(null, request("setLogVerbosityLevel") { put("new_verbosity_level", 0) }.toString())
     }
 
-    suspend fun call(query: JsonObject): JsonObject {
+    val isOpen: Boolean get() = !closing && !closed
+
+    suspend fun call(query: JsonObject): JsonObject = telegramRetry {
+        val wait = blockedUntil - System.currentTimeMillis()
+        if(wait > 0) throw TelegramFailure("Telegram requested a pause. Wait before retrying this operation.","RATE_LIMIT",true,wait)
+        try { callOnce(query) } catch (failure: TelegramFailure) {
+            if (failure.retryAfterMs > 0) { blockedUntil = System.currentTimeMillis()+failure.retryAfterMs; onThrottle(failure.retryAfterMs) }
+            throw failure
+        }
+    }
+
+    private suspend fun callOnce(query: JsonObject): JsonObject {
         val key = sequence.incrementAndGet().toString()
         val answer = CompletableDeferred<JsonObject>()
         try {
@@ -93,15 +129,18 @@ internal class TdJsonClient(private val onUpdate: suspend (JsonObject) -> Unit) 
                 val event = Json.parseToJsonElement(pointer.getString(0, "UTF-8")).jsonObject
                 val extra = event.string("@extra")
                 if (extra.isNotEmpty()) pending.remove(extra)?.complete(event)
-                else updates.launch { onUpdate(event) }
+                else updateQueue.trySend(event)
                 if (event.string("@type") == "updateAuthorizationState" && event.obj("authorization_state")?.string("@type") == "authorizationStateClosed") closed = true
             }
         } catch (_: Exception) {
-            pending.values.forEach { it.completeExceptionally(TelegramFailure("Telegram connection was interrupted. Reconnect and retry.")) }
+            pending.values.forEach { it.completeExceptionally(TelegramFailure("Telegram connection was interrupted. Reconnect and retry.", "NETWORK", true)) }
         } finally {
             synchronized(this) { closed = true }
             pending.values.forEach { it.completeExceptionally(TelegramFailure("Telegram connection is closed.")) }
             pending.clear()
+            updateQueue.close()
+            // Drain received edit/delete work into the app journal on a normal close.
+            runBlocking { withTimeoutOrNull(10_000) { updateWorker.join() } }
             updates.cancel()
             api.td_json_client_destroy(client)
         }

@@ -66,6 +66,9 @@ data class TelegramSource(
     val libraryIds: Set<String>,
     val startLink: String,
     val endLink: String,
+    val automaticUpdates: Boolean = true,
+    val scanOnLaunch: Boolean = true,
+    val scanIntervalMinutes: Int = 15,
 ) {
     init {
         require(name.isNotBlank()) { "Source name is required." }
@@ -73,6 +76,7 @@ data class TelegramSource(
         require(firstId in 1..Int.MAX_VALUE.toLong() && lastId in firstId..Int.MAX_VALUE.toLong()) { "Invalid message range." }
         require(topicId == null || topicId in 1..Int.MAX_VALUE.toLong()) { "Invalid topic ID." }
         require(libraryIds.isNotEmpty()) { "Select at least one library." }
+        require(scanIntervalMinutes in 0..10080) { "Scan interval must be 0–10080 minutes (0 disables the schedule)." }
     }
 
     val scanSignature: String get() = "$providerId|$chat|$firstId|$lastId|$topicId|$parsingMode"

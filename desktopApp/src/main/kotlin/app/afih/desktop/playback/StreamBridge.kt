@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.Executors
 import kotlinx.coroutines.*
+import app.afih.desktop.telegram.telegramRetry
 
 /** A single-player, loopback-only HTTP adapter. The random capability never contains credentials. */
 internal class StreamBridge(private val source: MediaByteSource, private val onFailure: (Throwable) -> Unit) : AutoCloseable {
@@ -59,7 +60,7 @@ internal class StreamBridge(private val source: MediaByteSource, private val onF
             while (offset <= range.last) {
                 currentCoroutineContext().ensureActive()
                 val count = minOf(262144L, range.last - offset + 1).toInt()
-                val bytes = try { source.read(offset, count) } catch (timeout: TimeoutCancellationException) {
+                val bytes = try { telegramRetry { source.read(offset, count) } } catch (timeout: TimeoutCancellationException) {
                     onFailure(timeout); return
                 } catch (cancelled: CancellationException) {
                     throw cancelled

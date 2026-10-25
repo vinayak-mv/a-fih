@@ -35,14 +35,15 @@ class MediaIndex(private val path: Path) {
         it.createStatement().use { statement -> statement.execute("PRAGMA busy_timeout = 10000") }
     }
 
-    fun checkpoint(source: TelegramSource, signature: String): Long = connection().use { db ->
-        db.prepareStatement("SELECT scanned_through FROM scan_progress WHERE source_id = ? AND signature = ?").use { query ->
+    fun checkpoint(source: TelegramSource, signature: String, legacySignature: String = signature): Long = connection().use { db ->
+        db.prepareStatement("SELECT scanned_through FROM scan_progress WHERE source_id = ? AND (signature = ? OR signature = ?)").use { query ->
             query.setString(1, source.id); query.setString(2, signature)
+            query.setString(3, legacySignature)
             query.executeQuery().use { result -> if (result.next()) result.getLong(1).coerceIn(source.firstId - 1, source.lastId) else source.firstId - 1 }
         }
     }
 
-    fun commit(source: TelegramSource, signature: String, batch: ScanBatch) {
+    fun commit(source: TelegramSource, signature: String, batch: ScanBatch, advanceProgress: Boolean = true) {
         require(batch.scannedThrough in source.firstId..source.lastId)
         require(batch.messages.all { it.key.providerId == source.providerId && it.key.chat == source.chat && it.key.messageId in source.firstId..batch.scannedThrough })
         connection().use { db ->
@@ -67,7 +68,7 @@ class MediaIndex(private val path: Path) {
                         }
                     }
                 }
-                db.prepareStatement("INSERT INTO scan_progress VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET signature=excluded.signature, scanned_through=excluded.scanned_through").use {
+                if (advanceProgress) db.prepareStatement("INSERT INTO scan_progress VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET signature=excluded.signature, scanned_through=excluded.scanned_through").use {
                     it.setString(1, source.id); it.setString(2, signature); it.setLong(3, batch.scannedThrough); it.executeUpdate()
                 }
                 db.commit()
@@ -75,6 +76,13 @@ class MediaIndex(private val path: Path) {
                 db.rollback()
                 throw failure
             }
+        }
+    }
+
+    fun get(key: MessageKey): IndexedMessage? = connection().use { db ->
+        db.prepareStatement("SELECT * FROM media WHERE provider=? AND chat=? AND message_id=?").use {
+            it.setString(1,key.providerId); it.setString(2,key.chat); it.setLong(3,key.messageId)
+            it.executeQuery().use { rows -> if(!rows.next()) null else IndexedMessage(key,rows.getString("file_name"),rows.getLong("topic_id").let { value -> if(rows.wasNull()) null else value }, rows.getString("caption"),rows.getString("mime_type"),rows.getLong("size_bytes"),rows.getString("remote_file_id"),rows.getString("title")) }
         }
     }
 

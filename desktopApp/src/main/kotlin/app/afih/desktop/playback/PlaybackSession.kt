@@ -11,6 +11,8 @@ import kotlinx.coroutines.sync.withLock
 internal class PlaybackSession private constructor(
     val media: IndexedMessage, private val source: MediaByteSource,
     private val store: PlaybackStore, savedPosition: Long,
+    private val onFailure: (Throwable) -> Unit,
+    private val onHealthy: () -> Unit,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
@@ -21,6 +23,8 @@ internal class PlaybackSession private constructor(
     private var windowId: Long? = null
     private var monitor: Job? = null
     private var closed = false
+    private var failureRecorded = false
+    private var healthyReported = false
 
     fun attach(id: Long) { scope.launch {
         lock.withLock {
@@ -44,6 +48,9 @@ internal class PlaybackSession private constructor(
                             if (!closed) {
                                 try {
                                     mutableState.update { current -> engine?.snapshot(current) ?: current }
+                                    if (!healthyReported && !state.value.loading && state.value.failure == null && state.value.positionMs >= 1000) {
+                                        healthyReported = true; onHealthy()
+                                    }
                                     if (++ticks % 20 == 0) saveProgress()
                                 } catch (failure: Exception) { fail(failure) }
                             }
@@ -64,7 +71,10 @@ internal class PlaybackSession private constructor(
             }
         }
     }
-    private fun fail(failure: Throwable) { mutableState.update { it.copy(loading = false, buffering = false, failure = userFacingFailure(failure)) } }
+    @Synchronized private fun fail(failure: Throwable) {
+        mutableState.update { it.copy(loading = false, buffering = false, failure = userFacingFailure(failure)) }
+        if (!failureRecorded) { failureRecorded = true; runCatching { onFailure(failure) } }
+    }
     private fun action(block: (MpvEngine) -> Unit) { scope.launch {
         lock.withLock {
             if (!closed) try { engine?.let(block) } catch (failure: Exception) { fail(failure) }
@@ -86,6 +96,7 @@ internal class PlaybackSession private constructor(
             engine?.close(); engine = null
             val previous = windowId; windowId = null
             mutableState.update { it.copy(loading = true, failure = null, ended = false) }
+            failureRecorded = false; healthyReported = false
             previous
         }
         if (id != null) attach(id)
@@ -106,9 +117,9 @@ internal class PlaybackSession private constructor(
         scope.cancel()
     }
     companion object {
-        fun open(media: IndexedMessage, source: MediaByteSource, store: PlaybackStore): PlaybackSession {
+        fun open(media: IndexedMessage, source: MediaByteSource, store: PlaybackStore, onFailure: (Throwable) -> Unit = {}, onHealthy: () -> Unit = {}): PlaybackSession {
             NativePlayerRuntime.api // Fail before changing screens if the runtime is missing.
-            return PlaybackSession(media, source, store, store.position(media.key))
+            return PlaybackSession(media, source, store, store.position(media.key),onFailure,onHealthy)
         }
     }
 }

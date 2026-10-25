@@ -42,6 +42,7 @@ fun SourcesPanel(
                 Text(source.name, style = MaterialTheme.typography.titleLarge)
                 Text("${configuration.providers.find { it.id == source.providerId }?.name ?: "Missing provider"} · messages ${source.firstId}–${source.lastId}" + (source.topicId?.let { " · topic $it" } ?: " · whole chat"))
                 Text(configuration.libraries.filter { it.id in source.libraryIds }.joinToString { it.name })
+                Text("Incoming updates: ${if(source.automaticUpdates) "on" else "off"} · launch scan: ${if(source.scanOnLaunch) "on" else "off"} · schedule: ${if(source.scanIntervalMinutes == 0) "off" else "${source.scanIntervalMinutes} min"}", style = MaterialTheme.typography.bodySmall)
                 scan?.let {
                     val fraction = ((it.scannedThrough - source.firstId + 1).toFloat() / (source.lastId - source.firstId + 1)).coerceIn(0f, 1f)
                     LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
@@ -78,6 +79,9 @@ private fun SourceDialog(configuration: AppConfiguration, service: LibraryServic
     var endLink by remember { mutableStateOf(source?.endLink.orEmpty()) }
     var topicOnly by remember { mutableStateOf(source?.topicId != null) }
     var parsing by remember { mutableStateOf(source?.parsingMode) }
+    var automatic by remember { mutableStateOf(source?.automaticUpdates ?: true) }
+    var launchScan by remember { mutableStateOf(source?.scanOnLaunch ?: true) }
+    var interval by remember { mutableStateOf((source?.scanIntervalMinutes ?: 15).toString()) }
     var libraries by remember { mutableStateOf(source?.libraryIds ?: emptySet()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -92,6 +96,10 @@ private fun SourceDialog(configuration: AppConfiguration, service: LibraryServic
                 OutlinedTextField(startLink, { startLink = it }, enabled = !busy, label = { Text("Start message link") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(endLink, { endLink = it }, enabled = !busy, label = { Text("End message link") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(topicOnly, { topicOnly = it }, enabled = !busy); Text("Only the topic specified in these links") }
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(automatic,{ automatic = it },enabled = !busy); Text("Follow new messages and edits") }
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(launchScan,{ launchScan = it },enabled = !busy); Text("Scan on app launch") }
+                OutlinedTextField(interval,{ interval = it },enabled = !busy,label = { Text("Scan every N minutes (0 = off)") },singleLine = true)
+                Text("Schedules and incoming updates run while the app is open, including when minimized. Extend the end link manually if Telegram cannot replay an older gap.",style = MaterialTheme.typography.bodySmall)
                 Text("Libraries", style = MaterialTheme.typography.labelLarge)
                 configuration.libraries.forEach { library ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,7 +120,8 @@ private fun SourceDialog(configuration: AppConfiguration, service: LibraryServic
             scope.launch {
                 try {
                     val created = withContext(Dispatchers.IO) { service.createSource(provider, name, startLink, endLink, topicOnly, libraries, parsing) }
-                    onSave(if (source == null) created else created.copy(id = source.id))
+                    val minutes = interval.toIntOrNull() ?: throw IllegalArgumentException("Enter a scan interval in minutes.")
+                    onSave(created.copy(id=source?.id ?: created.id,automaticUpdates=automatic,scanOnLaunch=launchScan,scanIntervalMinutes=minutes))
                 } catch (cancelled: CancellationException) { if (cancelled is TimeoutCancellationException) error = userFacingFailure(cancelled) else throw cancelled }
                 catch (failure: Exception) { error = userFacingFailure(failure) }
                 finally { busy = false }

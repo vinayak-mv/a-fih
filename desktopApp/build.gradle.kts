@@ -35,7 +35,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "a-Fih"
-            packageVersion = "0.5.0"
+            packageVersion = "0.6.0"
             appResourcesRootDir.set(rootProject.layout.projectDirectory.dir("native"))
             description = "Personal Telegram media library"
             vendor = "a-Fih"
