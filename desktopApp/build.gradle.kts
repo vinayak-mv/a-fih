@@ -15,6 +15,9 @@ dependencies {
     implementation(compose.material3)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("net.java.dev.jna:jna-platform:5.17.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+    implementation("org.xerial:sqlite-jdbc:3.50.3.0")
     testImplementation(kotlin("test"))
 }
 
@@ -24,10 +27,11 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "a-Fih"
-            packageVersion = "0.1.0"
+            packageVersion = "0.2.0"
+            appResourcesRootDir.set(rootProject.layout.projectDirectory.dir("native"))
             description = "Personal Telegram media library"
             vendor = "a-Fih"
-            modules("java.desktop", "java.logging", "jdk.unsupported")
+            modules("java.desktop", "java.logging", "java.sql", "java.management", "jdk.unsupported")
             windows {
                 menuGroup = "a-Fih"
                 upgradeUuid = "ce60ba32-8c4e-49ed-ad4d-282197e80183"

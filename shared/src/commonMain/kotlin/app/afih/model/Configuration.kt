@@ -39,4 +39,31 @@ data class AppConfiguration(
     val schemaVersion: Int = 1,
     val providers: List<TelegramProvider> = emptyList(),
     val libraries: List<MediaLibrary> = emptyList(),
+    val sources: List<TelegramSource> = emptyList(),
 )
+
+@Serializable
+data class TelegramSource(
+    val id: String,
+    val providerId: String,
+    val name: String,
+    /** Canonical numeric chat ID returned by the transport, never a mutable username. */
+    val chat: String,
+    val firstId: Long,
+    val lastId: Long,
+    val topicId: Long? = null,
+    val parsingMode: ParsingMode? = null,
+    val libraryIds: Set<String>,
+    val startLink: String,
+    val endLink: String,
+) {
+    init {
+        require(name.isNotBlank()) { "Source name is required." }
+        require(chat.toLongOrNull() != null) { "Source requires a resolved chat." }
+        require(firstId in 1..Int.MAX_VALUE.toLong() && lastId in firstId..Int.MAX_VALUE.toLong()) { "Invalid message range." }
+        require(topicId == null || topicId in 1..Int.MAX_VALUE.toLong()) { "Invalid topic ID." }
+        require(libraryIds.isNotEmpty()) { "Select at least one library." }
+    }
+
+    val scanSignature: String get() = "$providerId|$chat|$firstId|$lastId|$topicId|$parsingMode"
+}

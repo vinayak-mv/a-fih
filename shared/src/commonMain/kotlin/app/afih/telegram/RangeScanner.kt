@@ -2,7 +2,16 @@ package app.afih.telegram
 
 data class MessageKey(val providerId: String, val chat: String, val messageId: Long)
 
-data class IndexedMessage(val key: MessageKey, val fileName: String, val topicId: Long? = null)
+data class IndexedMessage(
+    val key: MessageKey,
+    val fileName: String,
+    val topicId: Long? = null,
+    val caption: String = "",
+    val mimeType: String = "",
+    val sizeBytes: Long = 0,
+    val remoteFileId: String = "",
+    val title: String = fileName,
+)
 
 fun interface MessageGateway {
     /** Successful missing/deleted/non-media IDs may be omitted. Failures must throw. */

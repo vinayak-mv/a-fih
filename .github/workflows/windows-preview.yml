@@ -13,7 +13,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  checks:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test Kotlin modules
+        shell: pwsh
+        run: ./gradlew.bat --no-daemon :shared:jvmTest :desktopApp:test
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: |
+            shared/build/reports/tests/
+            desktopApp/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 14
+  telegram-runtime:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      TD_REVISION: ea3f69ce11aef458bfbb09869b809ede4447486f
+      VCPKG_REVISION: 817892b0ecbc6af994dd6df999c73faf795adbf2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Telegram runtime
+        id: runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: native/windows-x64
+          key: tdlib-windows-x64-static-${{ env.TD_REVISION }}-${{ env.VCPKG_REVISION }}-${{ hashFiles('scripts/build-tdlib.ps1') }}
+      - name: Get pinned TDLib source
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: ${{ env.TD_REVISION }}
+          path: .tools/tdlib
+          persist-credentials: false
+      - name: Get pinned native dependency manager
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REVISION }}
+          path: .tools/vcpkg
+          persist-credentials: false
+      - name: Build Telegram runtime
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build-tdlib.ps1
+      - name: Upload Telegram runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-runtime-${{ github.run_number }}
+          path: native/windows-x64/
+          if-no-files-found: error
+          retention-days: 14
   build:
+    needs: [checks, telegram-runtime]
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -25,19 +90,26 @@ jobs:
           java-version: '17'
       - name: Set up Gradle and validate wrapper
         uses: gradle/actions/setup-gradle@v4
-      - name: Test and package portable application
-        shell: pwsh
-        run: ./gradlew.bat --no-daemon :shared:jvmTest :desktopApp:test :desktopApp:createDistributable
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Download Telegram runtime
+        uses: actions/download-artifact@v4
         with:
-          name: test-reports-${{ github.run_number }}
-          path: |
-            shared/build/reports/tests/
-            desktopApp/build/reports/tests/
-          if-no-files-found: ignore
-          retention-days: 14
+          name: telegram-runtime-${{ github.run_number }}
+          path: native/windows-x64
+      - name: Check native library loads and exports its JSON API
+        shell: pwsh
+        run: |
+          $libraryPath = (Resolve-Path 'native/windows-x64/tdjson.dll').Path
+          $handle = [System.Runtime.InteropServices.NativeLibrary]::Load($libraryPath)
+          try {
+            foreach ($symbol in @('td_json_client_create', 'td_json_client_send', 'td_json_client_receive', 'td_json_client_destroy', 'td_json_client_execute')) {
+              [void][System.Runtime.InteropServices.NativeLibrary]::GetExport($handle, $symbol)
+            }
+          } finally {
+            [System.Runtime.InteropServices.NativeLibrary]::Free($handle)
+          }
+      - name: Package portable application
+        shell: pwsh
+        run: ./gradlew.bat --no-daemon :desktopApp:createDistributable
       - name: Upload unsigned portable Windows app
         uses: actions/upload-artifact@v4
         with:

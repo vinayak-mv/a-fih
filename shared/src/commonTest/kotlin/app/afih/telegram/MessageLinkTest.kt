@@ -13,7 +13,7 @@ class MessageLinkTest {
     }
 
     @Test fun topicsAndQueryParameters() {
-        assertEquals(MessageLink("-100123456", 456, 20), parseMessageLink("https://t.me/c/123456/20/456?single"))
+        assertEquals(MessageLink("-1000000123456", 456, 20), parseMessageLink("https://t.me/c/123456/20/456?single"))
         assertEquals(MessageLink("@movies", 456, 20), parseMessageLink("t.me/movies/456?thread=20"))
         assertEquals(MessageLink("@movies", 456, 20), parseMessageLink("t.me/movies/20/456"))
     }

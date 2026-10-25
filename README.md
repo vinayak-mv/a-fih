@@ -7,7 +7,7 @@ The agreed product requirements are in [the v1 spec](docs/v1-spec.md).
 
 ## Current implementation
 
-This is the first foundation increment, not a working streaming release.
+This is the Telegram import increment (0.2.0), not a working streaming release.
 
 - Compose desktop shell following the prototype's light/red visual direction.
 - Add, edit, and remove Telegram provider configurations and media libraries.
@@ -20,11 +20,24 @@ This is the first foundation increment, not a working streaming release.
 - Tests for gap handling, interruption/resume, topic filtering, source isolation,
   parsing, secret redaction, and Windows encrypted-storage round trips.
 - GitHub Actions workflow for checks and a portable unsigned Windows app image.
+- Real TDLib bot authentication and source access checks.
+- Source setup with inclusive message ranges, whole-chat/topic scope, per-source
+  parsing preferences, and association with multiple libraries.
+- SQLite media index with transactional per-batch checkpoints and deduplication.
+- Manual scan/pause/resume and browsing/searching imported files by library.
+- CI builds and caches a pinned TDLib Windows DLL, bundles it with the app, and
+  includes TDLib/OpenSSL/zlib license notices. Initial native builds take longer.
 
-Provider configurations are saved locally but are **not yet authenticated**.
-No Telegram native dependency is bundled yet. Source assignment, the media index,
-update recovery, metadata, playback, and downloads are not implemented. Empty
-screens state this explicitly and do not contain fake media or success results.
+Use **Connect / check** on a provider to authenticate it. **Sources → Add source**
+checks chat access, saves its configuration, and starts scanning. Open a library
+to browse imported file titles. Editing a source's range or parsing preference
+causes a fresh bounded scan; already imported media is retained and deduplicated.
+Removing a source forgets its index associations without touching Telegram files.
+
+Incoming updates, update recovery, scheduled scanning, metadata enrichment,
+playback, and downloads are not implemented yet. Their screens do not contain
+fake media or success results. Live bot access still needs testing with your own
+credentials; compilation and fixture tests cannot establish Telegram permissions.
 Android has not been enabled yet; shared domain code is in `commonMain` so that
 its business logic can be reused when the Android target is added.
 
@@ -42,8 +55,9 @@ These are unsigned preview artifacts, not signed releases. No Telegram or
 metadata credentials are needed in GitHub to build. Enter personal credentials
 in the app on your Windows device. No workflow publishes a GitHub release.
 
-The workflow has not been executed until a repository is connected and a run
-completes. See [implementation status](docs/implementation-status.md) for checks.
+The initial 0.1.0 build was successfully built and launched by the user. Each new
+increment still requires its own successful workflow and live integration checks.
+See [implementation status](docs/implementation-status.md) for verification.
 
 ## Optional local development
 
@@ -55,6 +69,11 @@ The checked-in wrapper pins Gradle 8.14.3 and its distribution checksum.
 .\gradlew.bat :desktopApp:run
 .\gradlew.bat :desktopApp:createDistributable
 ```
+
+For local Telegram development, put a built `tdjson.dll` at
+`native/windows-x64/tdjson.dll`, or set `AFIH_TDJSON_PATH` to its absolute path.
+The DLL is automatically bundled in GitHub Actions test artifacts. No credentials
+are stored in this DLL. Native build revisions are pinned in the workflow.
 
 The desktop app currently requires Windows because its secure store uses DPAPI.
 Shared tests can run on another JVM platform using `bash ./gradlew :shared:jvmTest`.
@@ -75,8 +94,6 @@ baseline rather than a requirement to use the newest available versions.
 
 ## Next milestone
 
-Validate and integrate a distributable Telegram native client, authenticate a
-real bot, retrieve an explicit source range into a transactional local media
-index, and test reconnect/update recovery. Keep raw MTProto message IDs separate
-from the chosen client's internal ID encoding. See the spec's acceptance gates
-before connecting this scanner to live Telegram operations.
+Validate a live range import with your bot and test reconnect/update recovery,
+then implement incoming updates and scheduling. Native playback and downloads
+follow. Raw MTProto message IDs remain separate from TDLib's internal encoding.

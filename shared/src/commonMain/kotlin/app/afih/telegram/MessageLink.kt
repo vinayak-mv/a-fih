@@ -27,9 +27,9 @@ fun parseMessageLink(value: String): MessageLink {
     val chat = if (privateChat) {
         val internal = path[1]
         require(internal.matches(Regex("[1-9][0-9]*"))) { "Invalid private channel ID." }
-        val id = ("-100$internal").toLongOrNull()
-        require(id != null) { "Private channel ID is out of range." }
-        id.toString()
+        val id = internal.toLongOrNull()
+        require(id != null && id <= Long.MAX_VALUE - 1_000_000_000_000L) { "Private channel ID is out of range." }
+        (-1_000_000_000_000L - id).toString()
     } else {
         require(path[0].matches(Regex("[A-Za-z][A-Za-z0-9_]{3,31}"))) { "Invalid channel username." }
         "@${path[0].lowercase()}"
