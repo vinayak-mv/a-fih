@@ -1,0 +1,17 @@
+.gradle/
+.kotlin/
+**/build/
+.idea/
+*.iml
+local.properties
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+*.keystore
+*.jks
+*.pfx
+*.dpapi
+.tools/
+native/

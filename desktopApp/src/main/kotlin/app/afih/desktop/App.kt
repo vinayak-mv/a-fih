@@ -1,0 +1,278 @@
+package app.afih.desktop
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import app.afih.model.*
+import java.util.UUID
+
+private val Accent = Color(0xFFB8000B)
+private val Canvas = Color(0xFFF9F9FB)
+
+@Composable
+fun AfihTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = Accent,
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFFFFDAD5),
+            background = Canvas,
+            surface = Color.White,
+            surfaceVariant = Color(0xFFEEEEF0),
+            onSurface = Color(0xFF1A1C1D),
+            onSurfaceVariant = Color(0xFF5F5E5E),
+        ),
+        shapes = Shapes(medium = RoundedCornerShape(16.dp), large = RoundedCornerShape(24.dp)),
+        content = content,
+    )
+}
+
+private enum class Page(val label: String) { HOME("Home"), LIBRARIES("Libraries"), PROVIDERS("Providers"), OFFLINE("Downloads"), ISSUES("Issues") }
+
+@Composable
+fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
+    var configuration by remember { mutableStateOf(initial) }
+    var page by remember { mutableStateOf(Page.HOME) }
+    var providerEditor by remember { mutableStateOf(false) }
+    var editingProvider by remember { mutableStateOf<TelegramProvider?>(null) }
+    var libraryEditor by remember { mutableStateOf(false) }
+    var editingLibrary by remember { mutableStateOf<MediaLibrary?>(null) }
+    var deletingProvider by remember { mutableStateOf<TelegramProvider?>(null) }
+    var deletingLibrary by remember { mutableStateOf<MediaLibrary?>(null) }
+    var storageError by remember { mutableStateOf(false) }
+
+    fun save(next: AppConfiguration): Boolean = try {
+        store.save(next)
+        configuration = next
+        true
+    } catch (_: Exception) {
+        storageError = true
+        false
+    }
+
+    Row(Modifier.fillMaxSize().background(Canvas)) {
+        Column(
+            Modifier.width(200.dp).fillMaxHeight().background(Color.White).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("a-Fih", color = Accent, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 22.dp))
+            Page.entries.forEach { destination ->
+                if (page == destination) {
+                    Button(onClick = { page = destination }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text(destination.label) }
+                } else {
+                    TextButton(onClick = { page = destination }, modifier = Modifier.fillMaxWidth()) { Text(destination.label, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Text("Windows preview · 0.1.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(page.label, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text(when (page) {
+                        Page.HOME -> "Your media, in one place."
+                        Page.LIBRARIES -> "Organize movies, series, anime, music, and files."
+                        Page.PROVIDERS -> "Manage your storage connections."
+                        Page.OFFLINE -> "Saved media for watching without a connection."
+                        Page.ISSUES -> "Review media that needs your attention."
+                    }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (page == Page.PROVIDERS) Button(onClick = { editingProvider = null; providerEditor = true }) { Text("Add provider") }
+                if (page == Page.LIBRARIES) Button(onClick = { editingLibrary = null; libraryEditor = true }) { Text("Create library") }
+            }
+            when (page) {
+                Page.HOME -> {
+                    Surface(color = Color(0xFFF3F3F5), shape = RoundedCornerShape(32.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(36.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text("Your Media Hub", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                            Text("Start by adding a Telegram provider and creating your libraries.")
+                            Button(onClick = { page = Page.PROVIDERS }) { Text("Manage providers") }
+                        }
+                    }
+                    Text("Library shortcuts", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    if (configuration.libraries.isEmpty()) EmptyPanel("No libraries yet", "Create a library to organize your collection.", "Create library") { editingLibrary = null; libraryEditor = true }
+                    else configuration.libraries.forEach { library ->
+                        InfoCard(library.name, library.kind.label(), "Manage libraries", { page = Page.LIBRARIES })
+                    }
+                    EmptyPanel("Recently added", "Indexed media will appear here once Telegram importing is available.")
+                }
+                Page.PROVIDERS -> {
+                    if (configuration.providers.isEmpty()) EmptyPanel("Connect your Telegram storage", "Use your own API ID, API hash, and bot token. You can manage each connection here.", "Add Telegram") { editingProvider = null; providerEditor = true }
+                    configuration.providers.forEach { provider ->
+                        Surface(shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(provider.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("Telegram · ${provider.parsingMode.label()}")
+                                Text("Saved on this device · connection not verified", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { editingProvider = provider; providerEditor = true }) { Text("Edit") }
+                                    TextButton(onClick = { deletingProvider = provider }) { Text("Remove") }
+                                }
+                            }
+                        }
+                    }
+                    Text("Telegram connection and source importing are the next implementation milestone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Page.LIBRARIES -> {
+                    if (configuration.libraries.isEmpty()) EmptyPanel("Make room for your collection", "Create separate libraries or combine sources into one.", "Create library") { editingLibrary = null; libraryEditor = true }
+                    configuration.libraries.forEach { library ->
+                        Surface(shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(library.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("${library.kind.label()} · no sources linked")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { editingLibrary = library; libraryEditor = true }) { Text("Edit") }
+                                    TextButton(onClick = { deletingLibrary = library }) { Text("Remove") }
+                                }
+                            }
+                        }
+                    }
+                }
+                Page.OFFLINE -> EmptyPanel("No downloads yet", "Completed downloads will form your offline library. Downloading is not available in this preview.")
+                Page.ISSUES -> EmptyPanel("No media issues", "Unavailable media will appear here with retry and removal options once playback is connected.")
+            }
+        }
+    }
+
+    if (providerEditor) ProviderDialog(editingProvider, onDismiss = { providerEditor = false }) { provider ->
+        val existing = configuration.providers.any { it.id == provider.id }
+        val next = if (existing) configuration.providers.map { if (it.id == provider.id) provider else it } else configuration.providers + provider
+        if (save(configuration.copy(providers = next))) providerEditor = false
+    }
+    if (libraryEditor) LibraryDialog(editingLibrary, onDismiss = { libraryEditor = false }) { library ->
+        val existing = configuration.libraries.any { it.id == library.id }
+        val next = if (existing) configuration.libraries.map { if (it.id == library.id) library else it } else configuration.libraries + library
+        if (save(configuration.copy(libraries = next))) libraryEditor = false
+    }
+    deletingProvider?.let { provider ->
+        Confirmation("Remove ${provider.name}?", "Remove this connection and its saved credentials from this device?", { deletingProvider = null }) {
+            if (save(configuration.copy(providers = configuration.providers.filterNot { it.id == provider.id }))) deletingProvider = null
+        }
+    }
+    deletingLibrary?.let { library ->
+        Confirmation("Remove ${library.name}?", "Remove this library from this device?", { deletingLibrary = null }) {
+            if (save(configuration.copy(libraries = configuration.libraries.filterNot { it.id == library.id }))) deletingLibrary = null
+        }
+    }
+    if (storageError) AlertDialog(
+        onDismissRequest = { storageError = false },
+        title = { Text("Settings were not saved") },
+        text = { Text("Your previous settings have been kept. Check available disk space and access to your Windows application data folder, then retry.") },
+        confirmButton = { TextButton(onClick = { storageError = false }) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun ProviderDialog(provider: TelegramProvider?, onDismiss: () -> Unit, onSave: (TelegramProvider) -> Unit) {
+    var name by remember { mutableStateOf(provider?.name ?: "") }
+    var apiId by remember { mutableStateOf(provider?.credentials?.apiId?.toString() ?: "") }
+    var apiHash by remember { mutableStateOf(provider?.credentials?.apiHash ?: "") }
+    var token by remember { mutableStateOf(provider?.credentials?.botToken ?: "") }
+    var parsing by remember { mutableStateOf(provider?.parsingMode ?: ParsingMode.BOTH) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (provider == null) "Add Telegram provider" else "Edit Telegram provider") },
+        text = {
+            Column(Modifier.width(440.dp).heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Connect with an MTProto bot account.")
+                OutlinedTextField(name, { name = it }, label = { Text("Connection name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(apiId, { apiId = it }, label = { Text("API ID") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(apiHash, { apiHash = it }, label = { Text("API hash") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(token, { token = it }, label = { Text("Bot token") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("Derive media information from", style = MaterialTheme.typography.labelLarge)
+                ParsingMode.entries.forEach { mode ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = parsing == mode, onClick = { parsing = mode })
+                        Text(mode.label())
+                    }
+                }
+                Text("Credentials are protected by your Windows account. Saving does not verify Telegram access.", style = MaterialTheme.typography.bodySmall)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val result = runCatching {
+                    TelegramProvider(
+                        provider?.id ?: UUID.randomUUID().toString(), name.trim(),
+                        TelegramCredentials(apiId.trim().toIntOrNull() ?: throw IllegalArgumentException("Enter a numeric API ID."), apiHash.trim(), token.trim()), parsing,
+                    )
+                }
+                result.fold(onSuccess = onSave, onFailure = { error = it.message ?: "Check the connection fields." })
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun LibraryDialog(library: MediaLibrary?, onDismiss: () -> Unit, onSave: (MediaLibrary) -> Unit) {
+    var name by remember { mutableStateOf(library?.name ?: "") }
+    var kind by remember { mutableStateOf(library?.kind ?: LibraryKind.MOVIES) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (library == null) "Create library" else "Edit library") },
+        text = {
+            Column(Modifier.width(380.dp).heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Library name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                LibraryKind.entries.forEach { option ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = kind == option, onClick = { kind = option })
+                        Text(option.label())
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(MediaLibrary(library?.id ?: UUID.randomUUID().toString(), name.trim(), kind)) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun EmptyPanel(title: String, description: String, action: String? = null, onAction: () -> Unit = {}) {
+    Surface(shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (action != null) OutlinedButton(onClick = onAction) { Text(action) }
+        }
+    }
+}
+
+@Composable
+private fun InfoCard(title: String, subtitle: String, action: String, onAction: () -> Unit) {
+    Surface(shape = RoundedCornerShape(20.dp)) {
+        Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onAction) { Text(action) }
+        }
+    }
+}
+
+@Composable
+private fun Confirmation(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) = AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(title) }, text = { Text(message) },
+    confirmButton = { Button(onClick = onConfirm) { Text("Remove") } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+)
+
+private fun ParsingMode.label(): String = when (this) { ParsingMode.FILE_NAME -> "Filename"; ParsingMode.CAPTION -> "Caption"; ParsingMode.BOTH -> "Filename and caption" }
+private fun LibraryKind.label(): String = when (this) { LibraryKind.MOVIES -> "Movies"; LibraryKind.SERIES -> "TV series"; LibraryKind.ANIME -> "Anime"; LibraryKind.MUSIC -> "Music"; LibraryKind.FILES -> "Files" }

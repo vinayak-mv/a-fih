@@ -1,0 +1,47 @@
+name: Windows preview
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle and validate wrapper
+        uses: gradle/actions/setup-gradle@v4
+      - name: Test and package portable application
+        shell: pwsh
+        run: ./gradlew.bat --no-daemon :shared:jvmTest :desktopApp:test :desktopApp:createDistributable
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: |
+            shared/build/reports/tests/
+            desktopApp/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload unsigned portable Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: a-Fih-windows-x64-preview-${{ github.run_number }}
+          path: desktopApp/build/compose/binaries/main/app/
+          if-no-files-found: error
+          retention-days: 14
