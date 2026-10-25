@@ -9,6 +9,7 @@ import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import javax.swing.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.swing.Swing
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent
@@ -57,20 +58,23 @@ internal class PlayerWindow private constructor(
         controls.add(status)
         controls.add(seek)
         val buttons = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT))
-        pause.addActionListener { player.controls().pause() }
+        pause.addActionListener { if (player.status().isPlaying) player.controls().pause() else player.controls().play() }
         seek.addChangeListener { if (!updating && !seek.valueIsAdjusting && player.status().isSeekable) player.controls().setPosition(seek.value / 10000f) }
         buttons.add(pause)
         buttons.add(JButton("Restart").apply { addActionListener { player.controls().setTime(0) } })
         buttons.add(time)
         buttons.add(JLabel("Volume"))
         buttons.add(JSlider(0, 100, 80).apply { preferredSize = Dimension(100, 26); addChangeListener { player.audio().setVolume(value) } })
-        buttons.add(JLabel("Audio")); buttons.add(audio)
-        buttons.add(JLabel("Subtitles")); buttons.add(subtitles)
+        controls.add(buttons)
+        val tracks = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT))
+        audio.preferredSize = Dimension(200, 28); subtitles.preferredSize = Dimension(200, 28)
+        tracks.add(JLabel("Audio")); tracks.add(audio)
+        tracks.add(JLabel("Subtitles")); tracks.add(subtitles)
         audio.maximumRowCount = 12; subtitles.maximumRowCount = 12
         audio.addActionListener { if (!updating) (audio.selectedItem as? Track)?.let { player.audio().setTrack(it.id) } }
         subtitles.addActionListener { if (!updating) (subtitles.selectedItem as? Track)?.let { player.subpictures().setTrack(it.id) } }
-        buttons.add(JButton("Maximize").apply { addActionListener { frame.extendedState = if (frame.extendedState == JFrame.MAXIMIZED_BOTH) JFrame.NORMAL else JFrame.MAXIMIZED_BOTH } })
-        controls.add(buttons)
+        tracks.add(JButton("Maximize").apply { addActionListener { frame.extendedState = if (frame.extendedState == JFrame.MAXIMIZED_BOTH) JFrame.NORMAL else JFrame.MAXIMIZED_BOTH } })
+        controls.add(tracks)
         frame.add(controls, BorderLayout.SOUTH)
         player.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
             override fun error(mediaPlayer: MediaPlayer) {
@@ -122,14 +126,16 @@ internal class PlayerWindow private constructor(
         tracks.firstOrNull { it.id == selected }?.let { box.selectedItem = it }
     }
     private fun storeProgress() {
+        if (!resumed) return
         val position = player.status().time()
         val length = player.status().length()
         scope.launch { runCatching { store.save(media.key, position, length) } }
     }
     suspend fun close() {
-        withContext(Dispatchers.Swing) {
-            if (!closed) { storeProgress(); closed = true; timer.stop(); frame.dispose() }
+        val shouldClose = withContext(Dispatchers.Swing) {
+            if (closed) false else { storeProgress(); closed = true; timer.stop(); frame.dispose(); true }
         }
+        if (!shouldClose) return
         bridge.close()
         withContext(Dispatchers.IO) { component.release(); source.close() }
         scope.coroutineContext[Job]?.children?.toList()?.joinAll()

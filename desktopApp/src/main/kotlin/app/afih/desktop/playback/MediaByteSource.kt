@@ -1,5 +1,7 @@
 package app.afih.desktop.playback
 
+internal class PlaybackFailure(message: String) : Exception(message)
+
 /** Bounded reads; offsets and lengths stay Long for files larger than 2 GiB. */
 internal interface MediaByteSource {
     val size: Long

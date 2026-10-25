@@ -36,9 +36,9 @@ class LibraryService(private val directory: Path) : AutoCloseable {
         val source = session(provider).openMedia(media)
         var opened: PlayerWindow? = null
         try {
-            opened = withContext(NonCancellable) {
+            opened = try { withContext(NonCancellable) {
                 PlayerWindow.open(media, source, playbackStore) { playbackScope.launch { stopPlayback() } }
-            }
+            } } catch (_: LinkageError) { throw PlaybackFailure("The player runtime could not load. Extract the complete Windows preview artifact and retry.") }
             currentCoroutineContext().ensureActive()
             player = opened
         } catch (failure: Throwable) {
@@ -136,15 +136,15 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     suspend fun resetSession(providerId: String) {
         stopPlayback()
         sessionLock.withLock {
-        sessions[providerId]?.second?.close()
-        sessions.remove(providerId)
-        UUID.fromString(providerId)
-        val root = directory.resolve("telegram").toAbsolutePath().normalize()
-        val sessionPath = root.resolve(providerId).normalize()
-        check(sessionPath.parent == root)
-        if (Files.exists(sessionPath)) Files.walk(sessionPath).use { paths ->
-            paths.sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
-        }
+            sessions[providerId]?.second?.close()
+            sessions.remove(providerId)
+            UUID.fromString(providerId)
+            val root = directory.resolve("telegram").toAbsolutePath().normalize()
+            val sessionPath = root.resolve(providerId).normalize()
+            check(sessionPath.parent == root)
+            if (Files.exists(sessionPath)) Files.walk(sessionPath).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
+            }
         }
     }
     fun removeSource(sourceId: String) { check(sourceId !in scans) { "Pause the scan before removing its source." }; index.removeSource(sourceId) }
@@ -160,6 +160,7 @@ class LibraryService(private val directory: Path) : AutoCloseable {
 
 /** Do not surface database paths, native request payloads, or credentials. */
 fun userFacingFailure(failure: Throwable): String = when (failure) {
+    is PlaybackFailure -> failure.message ?: "Playback could not start."
     is MetadataFailure -> failure.message ?: "Metadata could not be loaded."
     is TelegramFailure -> failure.message ?: "Telegram operation failed."
     is TimeoutCancellationException -> "Telegram timed out. Check your connection and retry."
