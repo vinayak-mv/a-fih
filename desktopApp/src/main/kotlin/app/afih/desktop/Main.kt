@@ -14,7 +14,8 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.WindowPlacement
 
-fun main() = application {
+// Allow the app's non-daemon close worker to flush progress/update journals before JVM exit.
+fun main() = application(exitProcessOnExit = false) {
     val opened = remember { runCatching { ConfigurationStore(ConfigurationStore.defaultPath()).let { it to it.load() } } }
     val windowState = rememberWindowState(width = 1200.dp, height = 820.dp)
     Window(
