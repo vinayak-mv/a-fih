@@ -96,7 +96,7 @@ class SyncRecoveryTest {
             val target = source.copy(lastId=SyncStore(path).latest("bot",chat))
             val requests = mutableListOf<List<Long>>()
             RangeScanner(MessageGateway { _,_,ids -> requests.add(ids); if(81L in ids) listOf(IndexedMessage(MessageKey("bot",chat,81),"Found.mkv")) else emptyList() },
-                ScanBatchStore { index.commit(target,"stable",it) }).scan("bot",MessageRange(chat,1,target.lastId),index.checkpoint(target,"stable"))
+                ScanBatchStore { index.commit(target,"stable",it) }).scan("bot",MessageRange(chat,1,target.lastId,null),index.checkpoint(target,"stable"))
             assertEquals(listOf(41L,61L,81L),requests.map { it.first() })
             assertEquals(81L,MediaIndex(path).checkpoint(target,"stable"))
             assertEquals("Found.mkv",index.list(setOf(source.id)).single().fileName)
