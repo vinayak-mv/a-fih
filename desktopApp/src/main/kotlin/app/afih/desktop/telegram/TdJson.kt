@@ -43,6 +43,7 @@ internal fun telegramFailure(error: JsonObject): TelegramFailure {
         code == 429L -> "Telegram requested a pause. Wait before retrying this operation."
         detail.contains("TOKEN", ignoreCase = true) -> "Telegram rejected the bot token. Check the provider credentials."
         detail.contains("API_ID", ignoreCase = true) || detail.contains("API_HASH", ignoreCase = true) -> "Telegram rejected the API ID or hash."
+        detail.contains("Supergroup not found", ignoreCase = true) -> "Telegram could not resolve this chat. Check the channel/group ID and bot access."
         detail.contains("CHANNEL_PRIVATE") || detail.contains("CHAT_NOT_FOUND") || detail.contains("CHAT_ID_INVALID") || detail.contains("USER_NOT_PARTICIPANT") || detail.contains("CHANNEL_INVALID") -> "The bot cannot access this chat. Check the chat and bot permissions."
         code == 401L -> "Telegram authorization is no longer valid. Reconnect the provider."
         code == 403L -> "Telegram denied access to this source. Check the bot permissions."

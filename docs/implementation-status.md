@@ -2,6 +2,13 @@
 
 ## Telegram import increment (0.2.0)
 
+Cold-start chat resolution fix: private sources now load their supergroup using
+`getSupergroup` before calling `createSupergroupChat` with network lookup enabled.
+This also applies when resuming saved sources after restart. The old force-only
+path required TDLib to have already learned the chat, which could happen only
+after a new incoming update in a fresh session. Regression fixtures cover empty
+sessions, username resolution, and genuine access failures; live retest pending.
+
 The user confirmed that the original 0.1.0 Windows build and app launch succeeded.
 The repository is now connected at `vinayak-mv/a-fih`.
 

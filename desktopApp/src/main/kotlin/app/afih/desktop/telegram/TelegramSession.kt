@@ -79,20 +79,7 @@ internal class TelegramSession(
         } finally { databaseKey.fill(0) }
     }
 
-    suspend fun resolveChat(reference: String): Pair<String, String> {
-        val chat = if (reference.startsWith('@')) {
-            client.call(request("searchPublicChat") { put("username", reference.removePrefix("@")) })
-        } else {
-            val id = reference.toLong()
-            require(id < -1_000_000_000_000L) { "Use a channel or supergroup message link." }
-            client.call(request("createSupergroupChat") { put("supergroup_id", -id - 1_000_000_000_000L); put("force", true) })
-        }
-        require(chat.obj("type")?.string("@type") == "chatTypeSupergroup") { "Use a channel or supergroup, not a direct bot conversation." }
-        // Force an access check before committing a source; don't rely only on cached chat info.
-        val supergroupId = chat.obj("type")!!.number("supergroup_id")
-        client.call(request("getSupergroupFullInfo") { put("supergroup_id", supergroupId) })
-        return chat.number("id").toString() to chat.string("title")
-    }
+    suspend fun resolveChat(reference: String): Pair<String, String> = resolveTelegramChat(reference, client::call)
 
     suspend fun fetch(chat: String, ids: List<Long>, parsingMode: ParsingMode): List<IndexedMessage> {
         val response = client.call(request("getMessages") {
