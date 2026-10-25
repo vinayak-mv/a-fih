@@ -18,12 +18,12 @@ class MpvEngineTest {
         override fun mpv_set_option_string(handle: Pointer, name: String, value: String): Int { options[name] = value; return 0 }
         override fun mpv_initialize(handle: Pointer) = initializeResult
         override fun mpv_command(handle: Pointer, arguments: Pointer): Int {
-            commands += buildList {
+            commands.add(buildList<String> {
                 for (index in 0..100) {
                     val pointer = arguments.getPointer(index * Native.POINTER_SIZE.toLong()) ?: break
                     add(pointer.getString(0, "UTF-8"))
                 }
-            }
+            })
             return 0
         }
         override fun mpv_set_property_string(handle: Pointer, name: String, value: String): Int { properties[name] = value; return 0 }

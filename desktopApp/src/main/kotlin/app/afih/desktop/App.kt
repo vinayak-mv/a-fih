@@ -56,6 +56,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
     var storageError by remember { mutableStateOf(false) }
     val service = remember { LibraryService(ConfigurationStore.defaultPath().parent) }
     val scope = rememberCoroutineScope()
+    val browseScroll = rememberScrollState()
     val scans = remember { mutableStateMapOf<String, ScanUi>() }
     val jobs = remember { mutableMapOf<String, Job>() }
     val connections = remember { mutableStateMapOf<String, String>() }
@@ -175,7 +176,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration, fullscreen: Bo
             Spacer(Modifier.weight(1f))
             Text("Windows preview · 0.5.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(browseScroll).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(page.label, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
