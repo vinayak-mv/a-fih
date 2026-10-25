@@ -1,5 +1,20 @@
 # Implementation status
 
+## TMDB library increment (0.3.0)
+
+- [x] Protected TMDB API key/read-token settings and language selection.
+- [x] Enrich existing imports and automatically fetch metadata after scans/on launch.
+- [x] Pause updates, retain completed matches, and retry unmatched files.
+- [x] Conservative filename/year/episode parsing and movie/series matching.
+- [x] Additive metadata/season tables preserve Telegram files and scan progress.
+- [x] Poster/list views, featured backdrops, details, cast, seasons, and episodes.
+- [x] Matched versions/episodes share cards; unmatched files stay browsable.
+- [x] Bounded local artwork cache, graceful missing artwork, and TMDB attribution.
+- [x] Fixture tests cover matching, decoding, caching, retry, and schema preservation.
+
+Current increment verification: CI compilation/tests and live matching with the
+user's TMDB credential are pending. No personal credentials are used in fixtures.
+
 ## Telegram import increment (0.2.0)
 
 Cold-start chat resolution fix: private sources now load their supergroup using
@@ -7,7 +22,8 @@ Cold-start chat resolution fix: private sources now load their supergroup using
 This also applies when resuming saved sources after restart. The old force-only
 path required TDLib to have already learned the chat, which could happen only
 after a new incoming update in a fresh session. Regression fixtures cover empty
-sessions, username resolution, and genuine access failures; live retest pending.
+sessions, username resolution, and genuine access failures. The user confirmed
+the cold-start fix works, and workflow 40202056007 passed all jobs.
 
 The user confirmed that the original 0.1.0 Windows build and app launch succeeded.
 The repository is now connected at `vinayak-mv/a-fih`.
@@ -25,12 +41,11 @@ New code in this increment:
 
 The Kotlin checks passed in workflow run 40184045823. The first native build
 revealed a missing gperf build tool; the build script now installs it through
-the pinned vcpkg tree and supplies its path to CMake. Native packaging and live
-bot acceptance remain to be verified.
+the pinned vcpkg tree and supplies its path to CMake. Subsequent native packaging
+and the user's live bot test succeeded.
 No personal credentials are present in fixtures. Incoming update indexing,
-reconnection recovery, scheduled scans, streaming, playback, downloads, metadata
-enrichment, and Android remain pending. Imported files currently have no play or
-download button. The library view shows up to 500 recent matching files.
+reconnection recovery, scheduled scans, streaming, playback, downloads, and
+Android remain pending. Imported files currently have no play or download button.
 
 ## Foundation implemented
 
@@ -60,8 +75,8 @@ Completed local checks:
 - Reviewed configuration diagnostics: credential values are masked/redacted and
   provider data is not printed to logs.
 
-Pending for 0.2.0: Kotlin/native compilation, execution of the expanded test
-suite, packaged startup, and live bot import checks. No YAML linter is installed.
+The 0.2.0 build and live cold-start import were validated. No YAML linter is
+installed. The new 0.3.0 tests and packaging still require a successful CI run.
 
 ## Next work
 
@@ -77,7 +92,8 @@ suite, packaged startup, and live bot import checks. No YAML linter is installed
 - [ ] Launch/manual/periodic scheduling and incoming media updates.
 - [ ] Native player selection, seekable streaming, and real codec/track validation.
 - [ ] Durable downloads, completed-download offline library, and offline playback.
-- [ ] Metadata, file grouping, discovery, search, and personal watch state.
+- [x] TMDB metadata, matched grouping, poster/detail discovery, and basic search.
+- [ ] Richer release parsing, music metadata, and personal watch state.
 - [ ] Android target, platform implementations, UI adaptation, and build artifacts.
 
 ## Technical boundaries
@@ -93,4 +109,4 @@ boundary, following the pinned TDLib `MessageId.h` layout.
 
 The initial UI uses system fonts until licensed Manrope/Inter font assets are
 bundled. It follows the prototype's tokens but has not been visually verified
-and does not yet recreate the media detail/player screens.
+and now includes metadata details; the player remains unimplemented.

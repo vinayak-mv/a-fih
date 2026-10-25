@@ -7,7 +7,7 @@ The agreed product requirements are in [the v1 spec](docs/v1-spec.md).
 
 ## Current implementation
 
-This is the Telegram import increment (0.2.0), not a working streaming release.
+This is the TMDB library increment (0.3.0), not a working streaming release.
 
 - Compose desktop shell following the prototype's light/red visual direction.
 - Add, edit, and remove Telegram provider configurations and media libraries.
@@ -27,6 +27,30 @@ This is the Telegram import increment (0.2.0), not a working streaming release.
 - Manual scan/pause/resume and browsing/searching imported files by library.
 - CI builds and caches a pinned TDLib Windows DLL, bundles it with the app, and
   includes TDLib/OpenSSL/zlib license notices. Initial native builds take longer.
+- Protected TMDB credentials and language selection, automatic metadata matching,
+  persistent title information, and a bounded local artwork cache.
+- Poster/list views, featured backdrops, synopsis, cast, seasons, and episodes.
+- Grouped cards for matched encodes/episodes, with unmatched files kept accessible.
+
+## Connect TMDB
+
+Open **Metadata**, enter your TMDB **API Read Access Token** (recommended) or v3
+API key, choose the metadata language, and select **Save and fetch metadata**.
+Existing imports are enriched without a Telegram rescan; future scans trigger
+enrichment automatically. Credentials are protected locally and never needed in CI.
+
+Ambiguous results remain unmatched. **Retry unmatched** repeats those lookups.
+Network/authentication/rate-limit failures are not stored as permanent no-match
+results. TMDB covers movies and series, including anime; music remains as files.
+Manual match correction is deferred, as specified for v1.
+
+Select a poster to see details and available versions. Season episode lists come
+from TMDB; episodes without imported files are marked **Not in your library**.
+Metadata tables are added to the existing SQLite catalog. Artwork is cached at
+`%LOCALAPPDATA%/a-Fih/artwork`, capped at 200 MiB. Credits includes TMDB's original
+logo and required attribution notice.
+
+## Telegram imports
 
 Use **Connect / check** on a provider to authenticate it. **Sources → Add source**
 checks chat access, saves its configuration, and starts scanning. Open a library
@@ -34,8 +58,8 @@ to browse imported file titles. Editing a source's range or parsing preference
 causes a fresh bounded scan; already imported media is retained and deduplicated.
 Removing a source forgets its index associations without touching Telegram files.
 
-Incoming updates, update recovery, scheduled scanning, metadata enrichment,
-playback, and downloads are not implemented yet. Their screens do not contain
+Incoming updates, update recovery, scheduled scanning, playback, and downloads
+are not implemented yet. Their screens do not contain
 fake media or success results. Live bot access still needs testing with your own
 credentials; compilation and fixture tests cannot establish Telegram permissions.
 Android has not been enabled yet; shared domain code is in `commonMain` so that

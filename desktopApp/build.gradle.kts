@@ -28,11 +28,11 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "a-Fih"
-            packageVersion = "0.2.0"
+            packageVersion = "0.3.0"
             appResourcesRootDir.set(rootProject.layout.projectDirectory.dir("native"))
             description = "Personal Telegram media library"
             vendor = "a-Fih"
-            modules("java.desktop", "java.logging", "java.sql", "java.management", "jdk.unsupported")
+            modules("java.desktop", "java.logging", "java.sql", "java.management", "java.net.http", "jdk.crypto.ec", "jdk.unsupported")
             windows {
                 menuGroup = "a-Fih"
                 upgradeUuid = "ce60ba32-8c4e-49ed-ad4d-282197e80183"

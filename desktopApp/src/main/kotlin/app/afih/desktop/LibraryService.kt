@@ -1,6 +1,7 @@
 package app.afih.desktop
 
 import app.afih.desktop.index.MediaIndex
+import app.afih.desktop.metadata.*
 import app.afih.desktop.telegram.TelegramFailure
 import app.afih.desktop.telegram.TelegramSession
 import app.afih.model.*
@@ -20,6 +21,24 @@ class LibraryService(private val directory: Path) : AutoCloseable {
     private val scans = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var closed = false
     private val index by lazy { MediaIndex(directory.resolve("media.sqlite")) }
+    val metadata by lazy { MetadataService(MetadataStore(directory.resolve("media.sqlite"))) }
+
+    fun catalog(configuration: AppConfiguration, libraryId: String? = null): List<CatalogFile> {
+        val sourceIds = configuration.sources.filter { libraryId == null || libraryId in it.libraryIds }.map { it.id }.toSet()
+        val files = buildList {
+            var offset = 0
+            do {
+                val batch = index.list(sourceIds, offset = offset)
+                addAll(batch)
+                offset += batch.size
+            } while (batch.size == 500)
+        }
+        val memberships = index.sourceMemberships(sourceIds)
+        return metadata.catalog(files, configuration.tmdb).map { entry ->
+            val libraries = configuration.sources.filter { it.id in memberships[entry.media.key].orEmpty() }.flatMap { it.libraryIds }.toSet()
+            entry.copy(libraryKinds = configuration.libraries.filter { it.id in libraries }.map { it.kind }.toSet())
+        }
+    }
 
     private suspend fun session(provider: TelegramProvider): TelegramSession = sessionLock.withLock {
         check(!closed) { "Application is closing." }
@@ -107,6 +126,7 @@ class LibraryService(private val directory: Path) : AutoCloseable {
 
 /** Do not surface database paths, native request payloads, or credentials. */
 fun userFacingFailure(failure: Throwable): String = when (failure) {
+    is MetadataFailure -> failure.message ?: "Metadata could not be loaded."
     is TelegramFailure -> failure.message ?: "Telegram operation failed."
     is TimeoutCancellationException -> "Telegram timed out. Check your connection and retry."
     is IllegalArgumentException -> failure.message ?: "Check the source settings."

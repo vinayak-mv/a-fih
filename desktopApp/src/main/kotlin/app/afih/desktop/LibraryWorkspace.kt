@@ -9,8 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.afih.model.*
-import app.afih.telegram.IndexedMessage
-import java.util.Locale
 import kotlinx.coroutines.*
 
 data class ScanUi(val scannedThrough: Long, val running: Boolean, val message: String)
@@ -131,39 +129,7 @@ private fun ChoiceRow(label: String, selected: Boolean, enabled: Boolean, onSele
 
 @Composable
 fun IndexedMediaPanel(configuration: AppConfiguration, service: LibraryService, libraryId: String?, revision: Int) {
-    var query by remember { mutableStateOf("") }
-    var media by remember { mutableStateOf<List<IndexedMessage>>(emptyList()) }
-    var failure by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    LaunchedEffect(configuration.sources, libraryId, revision, query) {
-        loading = true
-        try {
-            media = withContext(Dispatchers.IO) { service.media(configuration.sources, libraryId, query) }
-            failure = null
-        } catch (cancelled: CancellationException) { throw cancelled }
-        catch (problem: Exception) { failure = userFacingFailure(problem) }
-        finally { loading = false }
-    }
-    OutlinedTextField(query, { query = it }, label = { Text("Search imported titles and filenames") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-    failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    Text("${media.size} imported files${if (media.size == 500) " (latest 500)" else ""}", style = MaterialTheme.typography.labelLarge)
-    if (!loading && media.isEmpty() && failure == null) Text("No matching media. Add a source and scan its message range.")
-    media.forEach { item ->
-        Surface(shape = MaterialTheme.shapes.medium) {
-            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(item.title, style = MaterialTheme.typography.titleMedium)
-                Text(item.fileName, style = MaterialTheme.typography.bodySmall)
-                Text("${item.mimeType.ifBlank { "Media file" }} · ${formatSize(item.sizeBytes)} · message ${item.key.messageId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-    Text("Playback and downloads will be added in the next milestone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    CatalogPanel(configuration, service, libraryId, revision)
 }
 
 private fun ParsingMode.displayName() = when (this) { ParsingMode.FILE_NAME -> "Filename"; ParsingMode.CAPTION -> "Caption"; ParsingMode.BOTH -> "Filename and caption" }
-private fun formatSize(bytes: Long): String = when {
-    bytes >= 1024L * 1024 * 1024 -> String.format(Locale.ROOT, "%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
-    bytes >= 1024L * 1024 -> String.format(Locale.ROOT, "%.1f MB", bytes.toDouble() / (1024 * 1024))
-    else -> "${bytes / 1024} KB"
-}

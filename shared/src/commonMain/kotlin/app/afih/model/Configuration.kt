@@ -40,7 +40,17 @@ data class AppConfiguration(
     val providers: List<TelegramProvider> = emptyList(),
     val libraries: List<MediaLibrary> = emptyList(),
     val sources: List<TelegramSource> = emptyList(),
+    val tmdb: TmdbSettings? = null,
 )
+
+@Serializable
+data class TmdbSettings(val credential: String, val language: String = "en-US") {
+    init {
+        require(credential.isNotBlank() && credential.none { it.isWhitespace() }) { "Enter your TMDB API key or API Read Access Token." }
+        require(language.matches(Regex("[a-z]{2}-[A-Z]{2}"))) { "Use a language code such as en-US." }
+    }
+    override fun toString() = "TmdbSettings(credential=[redacted], language=$language)"
+}
 
 @Serializable
 data class TelegramSource(

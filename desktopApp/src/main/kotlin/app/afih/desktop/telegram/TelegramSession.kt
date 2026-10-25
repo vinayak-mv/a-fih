@@ -74,7 +74,7 @@ internal class TelegramSession(
                 put("system_language_code", "en")
                 put("device_model", "a-Fih Windows")
                 put("system_version", System.getProperty("os.version"))
-                put("application_version", "0.2.0")
+                put("application_version", "0.3.0")
             })
         } finally { databaseKey.fill(0) }
     }

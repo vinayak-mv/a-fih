@@ -78,15 +78,17 @@ class MediaIndex(private val path: Path) {
         }
     }
 
-    fun list(sourceIds: Set<String>, limit: Int = 500, query: String = ""): List<IndexedMessage> {
+    fun list(sourceIds: Set<String>, limit: Int = 500, query: String = "", offset: Int = 0): List<IndexedMessage> {
         require(limit in 1..500)
+        require(offset >= 0)
         if (sourceIds.isEmpty()) return emptyList()
         return connection().use { db ->
             val placeholders = sourceIds.joinToString(",") { "?" }
-            db.prepareStatement("SELECT DISTINCT m.* FROM media m JOIN source_media s USING(provider, chat, message_id) WHERE s.source_id IN ($placeholders) AND (? = '' OR instr(lower(m.title), lower(?)) > 0 OR instr(lower(m.file_name), lower(?)) > 0) ORDER BY indexed_at DESC, message_id DESC LIMIT ?").use { statement ->
+            db.prepareStatement("SELECT DISTINCT m.* FROM media m JOIN source_media s USING(provider, chat, message_id) WHERE s.source_id IN ($placeholders) AND (? = '' OR instr(lower(m.title), lower(?)) > 0 OR instr(lower(m.file_name), lower(?)) > 0) ORDER BY indexed_at DESC, message_id DESC, provider, chat LIMIT ? OFFSET ?").use { statement ->
                 sourceIds.forEachIndexed { i, source -> statement.setString(i + 1, source) }
                 for (offset in 1..3) statement.setString(sourceIds.size + offset, query.trim())
                 statement.setInt(sourceIds.size + 4, limit)
+                statement.setInt(sourceIds.size + 5, offset)
                 statement.executeQuery().use { rows -> buildList {
                     while (rows.next()) add(IndexedMessage(
                         MessageKey(rows.getString("provider"), rows.getString("chat"), rows.getLong("message_id")),
@@ -95,6 +97,25 @@ class MediaIndex(private val path: Path) {
                         rows.getString("remote_file_id"), rows.getString("title"),
                     ))
                 } }
+            }
+        }
+    }
+
+    /** Actual stored memberships include files retained from earlier imported ranges. */
+    fun sourceMemberships(sourceIds: Set<String>): Map<MessageKey, Set<String>> {
+        if (sourceIds.isEmpty()) return emptyMap()
+        return connection().use { db ->
+            val placeholders = sourceIds.joinToString(",") { "?" }
+            db.prepareStatement("SELECT source_id, provider, chat, message_id FROM source_media WHERE source_id IN ($placeholders)").use { statement ->
+                sourceIds.forEachIndexed { i, id -> statement.setString(i + 1, id) }
+                statement.executeQuery().use { rows ->
+                    val result = mutableMapOf<MessageKey, MutableSet<String>>()
+                    while (rows.next()) {
+                        val key = MessageKey(rows.getString("provider"), rows.getString("chat"), rows.getLong("message_id"))
+                        result.getOrPut(key) { mutableSetOf() }.add(rows.getString("source_id"))
+                    }
+                    result
+                }
             }
         }
     }

@@ -40,7 +40,7 @@ fun AfihTheme(content: @Composable () -> Unit) {
     )
 }
 
-private enum class Page(val label: String) { HOME("Home"), LIBRARIES("Libraries"), SOURCES("Sources"), PROVIDERS("Providers"), OFFLINE("Downloads"), ISSUES("Issues") }
+private enum class Page(val label: String) { HOME("Home"), LIBRARIES("Libraries"), SOURCES("Sources"), PROVIDERS("Providers"), METADATA("Metadata"), OFFLINE("Downloads"), ISSUES("Issues") }
 
 @Composable
 fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
@@ -62,6 +62,10 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
     var mediaRevision by remember { mutableStateOf(0) }
     var selectedLibrary by remember { mutableStateOf<String?>(null) }
     var operationError by remember { mutableStateOf<String?>(null) }
+    var metadataJob by remember { mutableStateOf<Job?>(null) }
+    var metadataBusy by remember { mutableStateOf(false) }
+    var metadataStatus by remember { mutableStateOf<String?>(null) }
+    var metadataGeneration by remember { mutableStateOf(0) }
     DisposableEffect(service) {
         onDispose { Thread({ service.close() }, "afih-telegram-close").start() }
     }
@@ -73,6 +77,33 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
     } catch (_: Exception) {
         storageError = true
         false
+    }
+
+    fun enrich(retryUnmatched: Boolean = false) {
+        val snapshot = configuration
+        if (snapshot.tmdb == null) return
+        metadataJob?.cancel()
+        val generation = ++metadataGeneration
+        metadataBusy = true
+        metadataStatus = "Preparing library metadata…"
+        metadataJob = scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val files = service.catalog(snapshot)
+                    service.metadata.enrich(snapshot, files, retryUnmatched) { done, total ->
+                        if (done % 10 == 0 || done == total) withContext(Dispatchers.Main) {
+                            if (generation == metadataGeneration) { metadataStatus = "Checking metadata · $done / $total files"; mediaRevision++ }
+                        }
+                    }
+                }
+                if (generation == metadataGeneration) { metadataStatus = "Library metadata is up to date."; mediaRevision++ }
+            } catch (cancelled: CancellationException) {
+                if (generation == metadataGeneration) metadataStatus = "Metadata update paused. Saved matches have been kept."
+                throw cancelled
+            } catch (failure: Exception) {
+                if (generation == metadataGeneration) metadataStatus = userFacingFailure(failure)
+            } finally { if (generation == metadataGeneration) metadataBusy = false }
+        }
     }
 
     fun scan(source: TelegramSource) {
@@ -96,6 +127,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                 scans[source.id] = ScanUi(source.lastId, false, "Range complete through message ${source.lastId}")
                 connections[provider.id] = "Connected as bot"
                 mediaRevision++
+                enrich()
             } catch (cancelled: CancellationException) {
                 scans[source.id] = ScanUi(last, false, if (cancelled is TimeoutCancellationException) userFacingFailure(cancelled) else "Paused. Resume continues after the last saved batch.")
                 if (cancelled !is TimeoutCancellationException) throw cancelled
@@ -113,6 +145,8 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
         }
     }
 
+    LaunchedEffect(Unit) { if (configuration.tmdb != null) enrich() }
+
     Row(Modifier.fillMaxSize().background(Canvas)) {
         Column(
             Modifier.width(200.dp).fillMaxHeight().background(Color.White).padding(20.dp),
@@ -127,7 +161,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            Text("Windows preview · 0.2.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Windows preview · 0.3.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(36.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -138,6 +172,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                         Page.LIBRARIES -> "Organize movies, series, anime, music, and files."
                         Page.SOURCES -> "Import Telegram message ranges into your libraries."
                         Page.PROVIDERS -> "Manage your storage connections."
+                        Page.METADATA -> "Posters, stories, cast, and episode information."
                         Page.OFFLINE -> "Saved media for watching without a connection."
                         Page.ISSUES -> "Review media that needs your attention."
                     }, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -145,9 +180,17 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                 if (page == Page.PROVIDERS) Button(onClick = { editingProvider = null; providerEditor = true }) { Text("Add provider") }
                 if (page == Page.LIBRARIES) Button(onClick = { editingLibrary = null; libraryEditor = true }) { Text("Create library") }
             }
+            metadataStatus?.let { status ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    if (metadataBusy) TextButton(onClick = { metadataJob?.cancel() }) { Text("Pause") }
+                    else if (configuration.tmdb != null) TextButton(onClick = { enrich() }) { Text("Refresh metadata") }
+                }
+                if (metadataBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
             when (page) {
                 Page.HOME -> {
-                    Surface(color = Color(0xFFF3F3F5), shape = RoundedCornerShape(32.dp)) {
+                    if (configuration.sources.isEmpty()) Surface(color = Color(0xFFF3F3F5), shape = RoundedCornerShape(32.dp)) {
                         Column(Modifier.fillMaxWidth().padding(36.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text("Your Media Hub", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                             Text("Start by adding a Telegram provider and creating your libraries.")
@@ -159,7 +202,7 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                     else configuration.libraries.forEach { library ->
                         InfoCard(library.name, library.kind.label(), "Open library", { selectedLibrary = library.id; page = Page.LIBRARIES })
                     }
-                    Text("Recently imported", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Your collection", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     IndexedMediaPanel(configuration, service, null, mediaRevision)
                 }
                 Page.PROVIDERS -> {
@@ -189,6 +232,14 @@ fun AfihApp(store: ConfigurationStore, initial: AppConfiguration) {
                     }
                     OutlinedButton(onClick = { page = Page.SOURCES }) { Text("Manage Telegram sources") }
                 }
+                Page.METADATA -> MetadataSettingsPanel(configuration.tmdb, service, onSave = { settings ->
+                    if (save(configuration.copy(tmdb = settings))) {
+                        metadataJob?.cancel()
+                        mediaRevision++
+                        if (settings != null) enrich() else { metadataStatus = null; metadataBusy = false }
+                        true
+                    } else false
+                }, onRefresh = { enrich(retryUnmatched = true) })
                 Page.SOURCES -> SourcesPanel(
                     configuration, service, scans,
                     onSave = { source ->
