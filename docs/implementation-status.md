@@ -15,8 +15,10 @@ mpv player. This replaces the separate VLC/Swing window entirely.
 - [x] Native client ABI/commands/properties/track/error fixtures plus an embedded
   video smoke check using generated media and the real loopback bridge.
 
-Verification: Kotlin tests, native embedded playback/control checks, and portable
-packaging require this increment's CI run. Live rendering and fullscreen with
+Verification: [CI run 40210914139](https://github.com/vinayak-mv/a-fih/actions/runs/40210914139)
+passed all 46 tests (16 shared, 30 desktop), native video rendering in the embedded
+Windows surface, pause/volume/seek and peer-removal checks, and portable packaging.
+The artifact is `a-Fih-windows-x64-preview-12`. Live rendering and fullscreen with
 the user's Telegram MKV/H.265 collection remain device-side checks.
 
 ## Telegram streaming increment (0.4.0, player superseded by 0.5.0)

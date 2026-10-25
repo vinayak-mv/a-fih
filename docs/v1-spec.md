@@ -120,9 +120,10 @@ App termination/sleep is not a promise of uninterrupted background work.
   player and device; surface unsupported-format errors clearly.
 - No hosted transcoding. Casting, PiP, advanced automation, and extra player
   integrations are deferred unless needed to deliver reliable basic playback.
-- Player engine and native distribution are validation gates, not finalized
-  dependencies. Evaluate a Windows native engine such as libVLC or mpv and
-  an Android engine when Android implementation begins.
+- Windows uses bundled libmpv, selected by the user after validating Telegram
+  streaming. Playback must be integrated into the main app with Compose controls;
+  no separate player window or user-installed media player is required.
+  Select and validate an Android engine when Android implementation begins.
 
 ## Downloads and offline use
 
