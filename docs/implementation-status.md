@@ -16,7 +16,10 @@ New code in this increment:
 - Additional tests for codecs, database rollback/durability, configuration
   compatibility, and message ID conversion.
 
-This code still requires its own successful CI run and live bot acceptance test.
+The Kotlin checks passed in workflow run 40184045823. The first native build
+revealed a missing gperf build tool; the build script now installs it through
+the pinned vcpkg tree and supplies its path to CMake. Native packaging and live
+bot acceptance remain to be verified.
 No personal credentials are present in fixtures. Incoming update indexing,
 reconnection recovery, scheduled scans, streaming, playback, downloads, metadata
 enrichment, and Android remain pending. Imported files currently have no play or

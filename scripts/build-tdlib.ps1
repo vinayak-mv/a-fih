@@ -14,7 +14,7 @@ function Invoke-Checked {
 
 # Sources are checked out at immutable revisions by the workflow.
 Invoke-Checked (Join-Path $vcpkgSource 'bootstrap-vcpkg.bat') @('-disableMetrics')
-Invoke-Checked (Join-Path $vcpkgSource 'vcpkg.exe') @('install', 'openssl:x64-windows-static', 'zlib:x64-windows-static', '--disable-metrics')
+Invoke-Checked (Join-Path $vcpkgSource 'vcpkg.exe') @('install', 'openssl:x64-windows-static', 'zlib:x64-windows-static', 'gperf:x64-windows-static', '--disable-metrics')
 Invoke-Checked 'cmake' @(
     '-S', $tdSource, '-B', $tdBuild, '-A', 'x64',
     "-DCMAKE_TOOLCHAIN_FILE=$vcpkgSource/scripts/buildsystems/vcpkg.cmake",
@@ -22,6 +22,7 @@ Invoke-Checked 'cmake' @(
     "-DCMAKE_INSTALL_PREFIX=$tdInstall",
     '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
     '-DCMAKE_POLICY_DEFAULT_CMP0091=NEW',
+    "-DGPERF_EXECUTABLE:FILEPATH=$vcpkgSource/installed/x64-windows-static/tools/gperf/gperf.exe",
     '-DTD_ENABLE_JNI=OFF', '-DTD_ENABLE_DOTNET=OFF',
     '-DTD_INSTALL_STATIC_LIBRARIES=OFF', '-DTD_ENABLE_LTO=OFF', '-DBUILD_TESTING=OFF'
 )
