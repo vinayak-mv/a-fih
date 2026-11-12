@@ -40,45 +40,33 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
   telegram-runtime:
-    runs-on: windows-2022
-    timeout-minutes: 150
+    runs-on: windows-latest
+    timeout-minutes: 10
     env:
-      TD_REVISION: ea3f69ce11aef458bfbb09869b809ede4447486f
-      VCPKG_REVISION: 817892b0ecbc6af994dd6df999c73faf795adbf2
+      # Pinned prebuilt Telegram runtime (tdjson.dll + licenses/) published as a GitHub Release asset.
+      # Produce once from the pinned TDLib/vcpkg revisions, upload the zip + SHA256, then set these values.
+      # Previous build pins: TD_REVISION=ea3f69ce11aef458bfbb09869b809ede4447486f VCPKG_REVISION=817892b0ecbc6af994dd6df999c73faf795adbf2
+      TELEGRAM_RUNTIME_TAG: telegram-runtime-TODO
+      TELEGRAM_RUNTIME_ASSET: telegram-runtime-windows-x64.zip
+      TELEGRAM_RUNTIME_SHA256: TODO
     steps:
-      - uses: actions/checkout@v4
-      - name: Restore Telegram runtime
-        id: runtime-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: native/windows-x64
-          key: tdlib-windows-x64-static-${{ env.TD_REVISION }}-${{ env.VCPKG_REVISION }}-${{ hashFiles('scripts/build-tdlib.ps1') }}
-      - name: Get pinned TDLib source
-        if: steps.runtime-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: tdlib/td
-          ref: ${{ env.TD_REVISION }}
-          path: .tools/tdlib
-          persist-credentials: false
-      - name: Get pinned native dependency manager
-        if: steps.runtime-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: microsoft/vcpkg
-          ref: ${{ env.VCPKG_REVISION }}
-          path: .tools/vcpkg
-          persist-credentials: false
-      - name: Build Telegram runtime
-        if: steps.runtime-cache.outputs.cache-hit != 'true'
+      - name: Download prebuilt Telegram runtime
         shell: pwsh
-        run: ./scripts/build-tdlib.ps1
-      - name: Save Telegram runtime
-        if: steps.runtime-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        uses: actions/cache/save@v4
-        with:
-          path: native/windows-x64
-          key: tdlib-windows-x64-static-${{ env.TD_REVISION }}-${{ env.VCPKG_REVISION }}-${{ hashFiles('scripts/build-tdlib.ps1') }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:TELEGRAM_RUNTIME_TAG -eq 'telegram-runtime-TODO' -or $env:TELEGRAM_RUNTIME_SHA256 -eq 'TODO') {
+            throw 'Set TELEGRAM_RUNTIME_TAG, TELEGRAM_RUNTIME_ASSET, and TELEGRAM_RUNTIME_SHA256 to a published prebuilt runtime release asset.'
+          }
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TELEGRAM_RUNTIME_TAG/$env:TELEGRAM_RUNTIME_ASSET"
+          $zip = Join-Path $env:RUNNER_TEMP 'telegram-runtime.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = $env:TELEGRAM_RUNTIME_SHA256.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Telegram runtime checksum mismatch: expected $expected, got $actual" }
+          New-Item -ItemType Directory -Force -Path native/windows-x64 | Out-Null
+          Expand-Archive -Path $zip -DestinationPath native/windows-x64 -Force
+          if (!(Test-Path native/windows-x64/tdjson.dll)) { throw 'Prebuilt runtime archive must contain tdjson.dll at the archive root' }
+          if (!(Test-Path native/windows-x64/licenses)) { throw 'Prebuilt runtime archive must contain a licenses/ directory at the archive root' }
       - name: Upload Telegram runtime
         uses: actions/upload-artifact@v4
         with:
