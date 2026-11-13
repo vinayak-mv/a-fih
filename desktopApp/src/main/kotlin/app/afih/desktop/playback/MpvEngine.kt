@@ -135,3 +135,12 @@ internal class MpvEngine(
 
 internal fun milliseconds(value: String?): Long? = value?.toDoubleOrNull()
     ?.takeIf { it.isFinite() && it >= 0 && it < Long.MAX_VALUE / 1000.0 }?.let { (it * 1000).toLong() }
+
+internal fun playbackClock(ms: Long): String {
+    val totalSeconds = (ms.coerceAtLeast(0) / 1000).toInt()
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%02d:%02d".format(minutes, seconds)
+}
