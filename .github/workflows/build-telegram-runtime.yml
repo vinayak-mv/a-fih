@@ -1,0 +1,55 @@
+name: Build Telegram runtime (one-off)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      TD_REVISION: ea3f69ce11aef458bfbb09869b809ede4447486f
+      VCPKG_REVISION: 817892b0ecbc6af994dd6df999c73faf795adbf2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Telegram runtime cache
+        id: runtime-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: native/windows-x64
+          key: tdlib-windows-x64-static-${{ env.TD_REVISION }}-${{ env.VCPKG_REVISION }}-${{ hashFiles('scripts/build-tdlib.ps1') }}
+
+      - name: Get pinned TDLib source
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: ${{ env.TD_REVISION }}
+          path: .tools/tdlib
+          persist-credentials: false
+
+      - name: Get pinned native dependency manager
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REVISION }}
+          path: .tools/vcpkg
+          persist-credentials: false
+
+      - name: Build Telegram runtime
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build-tdlib.ps1
+
+      - name: Upload Telegram runtime files
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-runtime-windows-x64
+          path: native/windows-x64/
+          if-no-files-found: error
+          retention-days: 14
